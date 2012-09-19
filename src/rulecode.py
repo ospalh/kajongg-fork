@@ -21,6 +21,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 Read the user manual for a description of the interface to this scoring engine
 """
 
+from __future__ import unicode_literals
+
 from meld import Meld, CONCEALED, EXPOSED, CLAIMEDKONG, REST
 from common import elements, IntDict
 from message import Message

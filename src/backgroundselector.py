@@ -19,6 +19,8 @@
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
+from __future__ import unicode_literals
+
 from PyQt4 import QtGui
 from kde import KLineEdit
 from background import Background

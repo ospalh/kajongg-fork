@@ -37,6 +37,8 @@ Original port to QT4: U{Gabe Rudy<mailto:rudy@goldenhelix.com>}
 Subsequent port by therve
 """
 
+from __future__ import unicode_literals
+
 __all__ = ['install']
 
 

@@ -18,6 +18,8 @@ along with this program if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
+from __future__ import unicode_literals
+
 import socket, subprocess, time, datetime, os, sys
 import csv, re
 
@@ -1153,6 +1155,7 @@ class HumanClient(Client):
     def callServer(self, *args):
         """if we are online, call server"""
         if self.perspective:
+            args = list(args[:])
             if args[0] is None:
                 args = args[1:]
             try:
@@ -1161,6 +1164,9 @@ class HumanClient(Client):
                         self.game.debug('callServer(%s)' % repr(args))
                     else:
                         logDebug('callServer(%s)' % repr(args))
+                for idx, arg in enumerate(args):
+                    if isinstance(arg, unicode):
+                        args[idx] = arg.encode('utf-8')
                 return self.perspective.callRemote(*args)
             except pb.DeadReferenceError:
                 logWarning(m18n('The connection to the server %1 broke, please try again later.',

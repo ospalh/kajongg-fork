@@ -22,6 +22,8 @@
 Here we define classes useful for tree views
 """
 
+from __future__ import unicode_literals
+
 from PyQt4.QtCore import QAbstractItemModel, QModelIndex
 
 class TreeItem(object):

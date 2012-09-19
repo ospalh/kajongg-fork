@@ -23,10 +23,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 """
 
+from __future__ import unicode_literals
+
 import os, sys, time, datetime, traceback, random
 from collections import defaultdict
 from PyQt4.QtCore import QVariant, QString
-from util import logInfo, logWarning, logError, logDebug, appdataDir, m18ncE, xToUtf8
+from util import logInfo, logWarning, logError, logDebug, appdataDir, m18ncE
 from common import InternalParameters, Debug, IntDict
 from PyQt4.QtSql import QSqlQuery, QSqlDatabase, QSql
 
@@ -112,8 +114,8 @@ class Query(object):
                         args = list([args])
                     for dataSet in args:
                         if not silent:
-                            _, utf8Args = xToUtf8(u'', dataSet)
-                            logDebug("{cmd} [{args}]".format(cmd=cmd, args=", ".join(utf8Args)))
+                            strArgs = list(str(x) for x in dataSet)
+                            logDebug("{cmd} [{args}]".format(cmd=cmd, args=", ".join(strArgs)))
                         for value in dataSet:
                             self.query.addBindValue(QVariant(value))
                         self.success = self.query.exec_()

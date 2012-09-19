@@ -22,7 +22,8 @@ along with this program if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
-from __future__ import print_function
+from __future__ import unicode_literals, print_function
+
 import logging, socket, logging.handlers, traceback, os, datetime, shutil
 import time
 
@@ -35,7 +36,7 @@ except AttributeError:
 if not STDOUTENCODING:
     STDOUTENCODING = getpreferredencoding()
 
-SERVERMARK = '&&SERVER&&'
+SERVERMARK = b'&&SERVER&&'
 
 # util must not import twisted or we need to change kajongg.py
 
@@ -145,7 +146,7 @@ def initLog(logName):
         handler = logging.handlers.RotatingFileHandler('kajongg.log', maxBytes=100000000, backupCount=10)
     LOGGER.addHandler(handler)
     LOGGER.setLevel(logging.DEBUG)
-    formatter = logging.Formatter("%(name)s: %(levelname)s %(message)s")
+    formatter = logging.Formatter(b"%(name)s: %(levelname)s %(message)s")
     handler.setFormatter(formatter)
 
 def __logUnicodeMessage(prio, msg):
@@ -227,7 +228,6 @@ def logException(exception, withGamePrefix=True):
 
 def m18n(englishText, *args):
     """wrapper around i18n converting QString into a Python unicode string"""
-    englishText = xToUtf8(englishText)
     result = unicode(i18n(englishText, *args))
     if not args:
         ENGLISHDICT[result] = englishText
@@ -235,8 +235,8 @@ def m18n(englishText, *args):
 
 def m18nc(context, englishText, *args):
     """wrapper around i18nc converting QString into a Python unicode string"""
-    englishText = xToUtf8(englishText)
     result = unicode(i18nc(context, englishText, *args))
+#    result = unicode(str(i18nc(context, englishText, *args)), 'utf-8')
     if not args:
         ENGLISHDICT[result] = englishText
     return result

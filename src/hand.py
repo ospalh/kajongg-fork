@@ -21,6 +21,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 Read the user manual for a description of the interface to this scoring engine
 """
 
+from __future__ import unicode_literals
+
 from util import logDebug
 from meld import Meld, meldKey, meldsContent, Pairs, CONCEALED
 from rule import Score, Ruleset
@@ -324,7 +326,7 @@ class Hand(object):
             exposed = sorted(exposed, key=meldKey)
         bonus = sorted(Meld(x) for x in self.bonusMelds)
         for tile in tiles:
-            assert isinstance(tile, str) and len(tile) == 2, 'Hand.__sub__:%s' % tiles
+            assert isinstance(tile, unicode) and len(tile) == 2, 'Hand.__sub__:%s' % repr(tile)
             if tile.capitalize() in hidden:
                 hidden = hidden.replace(tile.capitalize(), '', 1)
             elif tile[0] in 'fy': # bonus tile

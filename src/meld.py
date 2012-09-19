@@ -24,6 +24,8 @@ Read the user manual for a description of the interface to this scoring engine
 
 
 
+from __future__ import unicode_literals
+
 from util import m18nc
 
 from tile import Tile

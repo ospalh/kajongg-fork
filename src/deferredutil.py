@@ -19,6 +19,8 @@ along with this program if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
+from __future__ import unicode_literals
+
 import traceback
 
 from twisted.spread import pb
@@ -119,8 +121,8 @@ class DeferredBlock(object):
         inserting a new block. Assuming that block creation
         never overlaps."""
         for block in DeferredBlock.blocks[:]:
-            if not block.callbackMethod:
-                block.logBug('DBlock %s has no callback' % str(block))
+#            if not block.callbackMethod:
+#                block.logBug('DBlock %s has no callback' % str(block))
             if block.completed:
                 DeferredBlock.blocks.remove(block)
 

@@ -18,6 +18,8 @@ along with this program if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
+from __future__ import unicode_literals
+
 from message import Message
 from meld import Meld
 
@@ -37,6 +39,8 @@ class Move(object): #pylint: disable=R0902
         self.score = None
         self.lastMeld = None
         for key, value in kwargs.items():
+            if isinstance(value, str):
+                value = unicode(value, 'utf-8')
             self.__setattr__(key, value)
         if self.lastMeld:
             self.lastMeld = Meld(self.lastMeld)

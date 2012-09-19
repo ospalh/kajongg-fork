@@ -23,6 +23,8 @@ Twisted Network Programming Essentials by Abe Fettig. Copyright 2006
 O'Reilly Media, Inc., ISBN 0-596-10032-9
 """
 
+from __future__ import unicode_literals
+
 import sys, os, random
 import signal
 
@@ -341,7 +343,7 @@ class Table(object):
 # TODO: the other players are still asked for game start - table should be reset instead
                 mayStart = False
         if not mayStart:
-            if self.preparedGame and not self.loadedFromDb:
+            if self.preparedGame and not self.loadedFromDb and self.tableid - 1000 in self.server.suspendedTables:
                 del self.server.suspendedTables[self.tableid - 1000]
                 self.preparedGame = None
             return
@@ -780,11 +782,16 @@ class MJServer(object):
 
     def callRemote(self, user, *args, **kwargs):
         """if we still have a connection, call remote, otherwise clean up"""
-        legalTypes = (int, long, basestring, float, list, tuple, type(None))
-        for arg in args:
+        args = list(args[:])
+        legalTypes = (int, long, str, unicode, float, list, tuple, type(None))
+        for idx, arg in enumerate(args):
+            if isinstance(arg, unicode):
+                arg = args[idx] = arg.encode('utf-8')
             if not isinstance(arg, legalTypes):
                 raise Exception('callRemote got illegal arg: %s %s' % (arg, type(arg)))
         for keyword, arg in kwargs.items():
+            if isinstance(arg, unicode):
+                arg = kwargs[keyword] = arg.encode('utf-8')
             if not isinstance(arg, legalTypes):
                 raise Exception('callRemote got illegal kwarg: %s:%s %s' % (keyword, arg, type(arg)))
         if user.mind:

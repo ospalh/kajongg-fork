@@ -11,6 +11,8 @@ Copyright (C) 2008-2011 Wolfgang Rohdewald
  the GNU General Public License for more details.
 """
 
+from __future__ import unicode_literals
+
 from PyQt4.QtCore import Qt, QSize, QRect, QEvent
 from PyQt4.QtGui import QStyledItemDelegate, QLabel, QTextDocument, QStyle, QPalette, \
     QStyleOptionViewItemV4, QApplication

@@ -21,6 +21,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 Read the user manual for a description of the interface to this scoring engine
 """
 
+from __future__ import unicode_literals
+
 import re # the new regex is about 7% faster
 from hashlib import md5 # pylint: disable=E0611
 

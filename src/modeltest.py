@@ -23,6 +23,8 @@
 #############################################################################
 """
 
+from __future__ import unicode_literals
+
 import sip
 from PyQt4 import QtCore
 

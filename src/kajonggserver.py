@@ -23,6 +23,8 @@ Twisted Network Programming Essentials by Abe Fettig. Copyright 2006
 O'Reilly Media, Inc., ISBN 0-596-10032-9
 """
 
+from __future__ import unicode_literals
+
 from server import kajonggServer
 
 kajonggServer()
