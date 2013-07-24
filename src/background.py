@@ -21,7 +21,7 @@ this python code:
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
-from PyQt4.QtCore import QString, QVariant, Qt
+from PyQt4.QtCore import QVariant, Qt
 from PyQt4.QtGui import QPainter, QBrush, QPalette, \
     QPixmapCache, QPixmap
 from PyQt4.QtSvg import QSvgRenderer
@@ -39,8 +39,7 @@ class BackgroundException(Exception):
 
 def locatebackground(which):
     """locate the file with a background"""
-    return QString(KStandardDirs.locate("kmahjonggbackground",
-                QString(which)))
+    return KStandardDirs.locate("kmahjonggbackground", which)
 
 class Background(object):
     """represents a background"""
@@ -51,7 +50,7 @@ class Background(object):
         """whatever this does"""
         if not Background.catalogDefined:
             KGlobal.dirs().addResourceType("kmahjonggbackground",
-                "data", QString.fromLatin1("kmahjongglib/backgrounds"))
+                "data", "kmahjongglib/backgrounds")
             KGlobal.locale().insertCatalog("libkmahjongglib")
             Background.catalogDefined = True
 
@@ -111,7 +110,7 @@ class Background(object):
                 raise Exception('cannot scan Height from background file')
         self.isPlain = bool(group.readEntry('Plain'))
         if not self.isPlain:
-            graphName = QString(group.readEntry("FileName"))
+            graphName = group.readEntry("FileName")
             self.__graphicspath = locatebackground(graphName)
             if self.__graphicspath.isEmpty():
                 logException(BackgroundException(
@@ -127,8 +126,7 @@ class Background(object):
             if self.tiled:
                 width = self.imageWidth
                 height = self.imageHeight
-            cachekey = QString("%1W%2H%3") \
-                .arg(self.name).arg(width).arg(height)
+            cachekey = "%sW%dH%d" % (self.name, width, height)
             self.__pmap = QPixmapCache.find(cachekey)
             if not self.__pmap:
                 renderer = QSvgRenderer(self.__graphicspath)

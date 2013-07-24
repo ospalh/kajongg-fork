@@ -18,7 +18,7 @@ along with this program if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
-from PyQt4.QtCore import QObject, QByteArray, QString, QEvent
+from PyQt4.QtCore import QObject, QByteArray, QEvent
 from PyQt4.QtGui import QSplitter, QHeaderView
 from util import isAlive, english
 from common import Preferences
@@ -91,4 +91,4 @@ class StateSaver(QObject):
                     saveMethod = widget.saveState
                 else:
                     saveMethod = widget.saveGeometry
-                Preferences[name] = QString(saveMethod().toHex())
+                Preferences[name] = saveMethod().toHex()

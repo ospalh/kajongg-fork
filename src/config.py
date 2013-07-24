@@ -22,7 +22,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
 
-from PyQt4.QtCore import QString
 from kde import KConfigSkeleton
 from util import logException
 import common
@@ -46,11 +45,11 @@ class StringParameter(Parameter):
         if default is None:
             default = ''
         Parameter.__init__(self, group, name, default)
-        self.value = QString()
+        self.value = ''
 
     def add(self, skeleton):
         """add tis parameter to the skeleton"""
-        self.item = skeleton.addItemString(self.name, self.value, QString(self.default or ''))
+        self.item = skeleton.addItemString(self.name, self.value, self.default or '')
 
     def itemValue(self):
         """returns the value of this item"""

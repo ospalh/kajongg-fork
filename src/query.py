@@ -25,7 +25,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 import os, sys, time, datetime, traceback, random
 from collections import defaultdict
-from PyQt4.QtCore import QVariant, QString
+from PyQt4.QtCore import QVariant
 from util import logInfo, logWarning, logError, logDebug, appdataDir, m18ncE, xToUtf8
 from common import InternalParameters, Debug, IntDict
 from PyQt4.QtSql import QSqlQuery, QSqlDatabase, QSql
@@ -157,8 +157,7 @@ class Query(object):
     def __convertField(self, idx):
         """convert a QSqlQuery field into a python value"""
         result = self.query.value(idx).toPyObject()
-        if isinstance(result, QString):
-            result = unicode(result)
+        assert isinstance(result, (long, basestring)), 'result is: %s %s %s' % (result, type(result), repr(result))
         if isinstance(result, long) and -sys.maxint -1 <= result <= sys.maxint:
             result = int(result)
         return result

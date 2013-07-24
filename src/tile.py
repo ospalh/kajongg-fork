@@ -18,7 +18,7 @@ along with this program if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
-from PyQt4.QtCore import Qt, QString, QRectF, QPointF, QSizeF, QSize, pyqtProperty, QObject
+from PyQt4.QtCore import Qt, QRectF, QPointF, QSizeF, QSize, pyqtProperty, QObject
 from PyQt4.QtGui import QGraphicsItem, QPixmap, QPainter
 from PyQt4.QtGui import QColor
 from util import logException, isAlive, stack, logDebug
@@ -142,9 +142,9 @@ class GraphicsTileItem(QGraphicsItem):
     def elementId(self):
         """returns the SVG element id of the tile"""
         if not self.showShadows:
-            return QString("TILE_2")
+            return "TILE_2"
         lightSourceIndex = LIGHTSOURCES.index(self.tile.board.rotatedLightSource())
-        return QString("TILE_%1").arg(lightSourceIndex%4+1)
+        return "TILE_%d" % (lightSourceIndex%4+1)
 
     def paint(self, painter, dummyOption, dummyWidget=None):
         """paint the entire tile.

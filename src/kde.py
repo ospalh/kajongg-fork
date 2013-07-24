@@ -21,7 +21,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 # pylint: disable=C0103,W0611
 # invalid names, unused imports
 
-from PyQt4.QtCore import Qt, QStringList
+from PyQt4.QtCore import Qt
 from PyQt4.QtGui import QDialog, QMessageBox
 
 from PyKDE4.kdecore import KUser, KGlobal, KStandardDirs, \
@@ -107,7 +107,7 @@ class NonModalInformation(Deferred):
         dlg.accepted.connect(self.accepted)
         dlg.rejected.connect(self.accepted)
         KMessageBox.createKMessageBox(dlg, QMessageBox.Question,
-            msg, QStringList(), "", False, KMessageBox.NoExec)
+            msg, [], "", False, KMessageBox.NoExec)
         dlg.show()
 
     def accepted(self):

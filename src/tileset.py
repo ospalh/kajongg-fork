@@ -23,7 +23,7 @@ this adapted python code:
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
-from PyQt4.QtCore import QString, QVariant, QSizeF
+from PyQt4.QtCore import QVariant, QSizeF
 from PyQt4.QtSvg import QSvgRenderer
 from kde import KGlobal, KStandardDirs, KConfig, KConfigGroup
 from util import logWarning, logException, m18n
@@ -37,8 +37,7 @@ class TileException(Exception):
 
 def locateTileset(which):
     """locate the file with a tileset"""
-    return QString(KStandardDirs.locate("kmahjonggtileset",
-                QString(which)))
+    return KStandardDirs.locate("kmahjonggtileset", which)
 
 class Tileset(object):
     """represents a complete tileset"""
@@ -51,7 +50,7 @@ class Tileset(object):
         """whatever this does"""
         if not Tileset.catalogDefined:
             KGlobal.dirs().addResourceType("kmahjonggtileset",
-                "data", QString.fromLatin1("kmahjongglib/tilesets"))
+                "data", "kmahjongglib/tilesets")
             KGlobal.locale().insertCatalog("libkmahjongglib")
             Tileset.catalogDefined = True
 
@@ -111,7 +110,7 @@ class Tileset(object):
             logException(TileException('tileversion file / program: %d/%d' % \
                 (tileversion, TILESETVERSIONFORMAT)))
 
-        graphName = QString(group.readEntry("FileName"))
+        graphName = group.readEntry("FileName")
         self.__graphicspath = locateTileset(graphName)
         if self.__graphicspath.isEmpty():
             logException(TileException('cannot find kmahjongglib/tilesets/%s for %s' % \

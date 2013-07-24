@@ -43,7 +43,7 @@ NOTFOUND = []
 
 try:
     from PyQt4.QtCore import Qt, QVariant, \
-        QEvent, QMetaObject, PYQT_VERSION_STR, QString
+        QEvent, QMetaObject, PYQT_VERSION_STR
     from PyQt4.QtGui import QPushButton, QMessageBox
     from PyQt4.QtGui import QWidget, QColor, QBrush
     from PyQt4.QtGui import QGridLayout, QAction
@@ -149,7 +149,7 @@ class PlayConfigTab( QWidget):
 class ConfigDialog(KConfigDialog):
     """configuration dialog with several pages"""
     def __init__(self, parent, name):
-        super(ConfigDialog, self).__init__(parent, QString(name), Preferences)
+        super(ConfigDialog, self).__init__(parent, name, Preferences)
         self.rulesetSelector = RulesetSelector(self)
         self.pages = []
         self.pages.append(self.addPage(PlayConfigTab(self),
