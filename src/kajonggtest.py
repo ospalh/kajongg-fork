@@ -32,7 +32,7 @@ def readGames(csvFile):
     """returns a dict holding a frozenset of games for each AI variant"""
     if not os.path.exists(csvFile):
         return
-    allRows = list(csv.reader(open(csvFile,'r'), delimiter=';'))
+    allRows = list(csv.reader(open(csvFile,'r'), delimiter=b';'))
     if not allRows:
         return
     # we want unique tuples so we can work with sets

@@ -935,7 +935,7 @@ class HumanClient(Client):
                 self.game.rotateWinds()
                 if InternalParameters.csv:
                     gameWinner = max(self.game.players, key=lambda x: x.balance)
-                    writer = csv.writer(open(InternalParameters.csv,'a'), delimiter=';')
+                    writer = csv.writer(open(InternalParameters.csv,'a'), delimiter=b';')
                     row = [InternalParameters.AI, str(self.game.seed), ','.join(self.game.csvTags)]
                     for player in sorted(self.game.players, key=lambda x: x.name):
                         row.append(player.name)

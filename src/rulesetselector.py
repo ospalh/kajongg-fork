@@ -221,7 +221,7 @@ class RuleModel(TreeModel):
         if role == Qt.DisplayRole and orientation == Qt.Horizontal:
             if section >= self.rootItem.columnCount():
                 return QVariant()
-            result = self.rootItem.content(section).toString()
+            result = unicode(self.rootItem.content(section).toString())
             if result == 'doubles':
                 result = 'x2'
             return m18n(result)

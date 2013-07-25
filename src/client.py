@@ -298,6 +298,8 @@ class Client(pb.Referenceable):
 
     def remote_move(self, playerName, command, *dummyArgs, **kwargs):
         """the server sends us info or a question and always wants us to answer"""
+        if playerName and not isinstance(playerName, unicode):
+            playerName = unicode(playerName, 'utf-8')
         player = None
         if self.game:
             if not self.game.client:

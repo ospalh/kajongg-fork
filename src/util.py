@@ -228,15 +228,14 @@ def logException(exception, withGamePrefix=True):
 
 def m18n(englishText, *args):
     """wrapper around i18n converting QString into a Python unicode string"""
-    result = unicode(i18n(englishText, *args))
+    result = unicode(i18n(englishText.encode('utf-8'), *args))
     if not args:
         ENGLISHDICT[result] = englishText
     return result
 
 def m18nc(context, englishText, *args):
     """wrapper around i18nc converting QString into a Python unicode string"""
-    result = unicode(i18nc(context, englishText, *args))
-#    result = unicode(str(i18nc(context, englishText, *args)), 'utf-8')
+    result = unicode(i18nc(context, englishText.encode('utf-8'), *args))
     if not args:
         ENGLISHDICT[result] = englishText
     return result
