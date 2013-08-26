@@ -267,7 +267,7 @@ class UIWall(Wall):
         name = side.nameLabel
         if player.handBoard:
             player.newHandContent = player.computeNewHand()
-            name.setText(' - '.join([player.localName, unicode(player.newHandContent.total())]))
+            name.setText(': '.join([player.localName, unicode(player.newHandContent.total())]))
         else:
             name.setText(player.localName)
         name.resetTransform()
