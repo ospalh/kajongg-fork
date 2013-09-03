@@ -227,6 +227,8 @@ class Ruleset(object):
     cache = dict()
     hits = 0
     misses = 0
+    (Chinese, Japanese, American) = range(3)
+    # Define basic styles of play.
 
     @staticmethod
     def clearCache():
@@ -247,6 +249,7 @@ class Ruleset(object):
 
     def __init__(self, name, used=False):
         self.name = name
+        self.basicStyle = Ruleset.Chinese
         self.__used = used
         self.orgUsed = used
         self.rulesetId = 0
