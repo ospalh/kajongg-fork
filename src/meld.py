@@ -328,6 +328,10 @@ class Meld(object):
         """is it a kong?"""
         return self.meldType in (KONG, CLAIMEDKONG)
 
+    def isPungOrKong(self):
+        """is it a pung or a kong?"""
+        return self.meldType in (PUNG, KONG, CLAIMEDKONG)
+
     @apply
     def pairs():
         """make them readonly"""
