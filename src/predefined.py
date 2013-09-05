@@ -393,14 +393,13 @@ Mahjong on the discard after the last tile in the wall. (Houtei)''')))
                 'Blessing of Earth', 'FBlessingOfEarth||Olastsource=1',
                 doubles=13, description=m18n(
                     'Mahjong on selfdraw in the first round (Chiho)')))
+        # Japanese Blessing of Earth may need to get its own rule, to
+        # make sure nobody has called anything.
         # self.winnerRules.add(
         #     Rule('Blessing of Man', 'FBlessingOfMan||Olastsource=1',
         #          doubles=13,
         #          description=m18n(
         #             'Mahjong on discard in the first round (Renho)')))
-
-        # Some other limit hands are missing as well.
-        # Look like the r'XEAST9X' (why the r‽) can safely be dropped.
 
     def addPenaltyRules(self):
         """Set penalty rules"""
@@ -410,6 +409,8 @@ Mahjong on the discard after the last tile in the wall. (Houtei)''')))
                 'Long Hand', r'FLongHand||Oabsolute', points=0, doubles=0,
                 description=m18n('The hand contains too many tiles')))
         # Too many tiles is one example of a dead hand.
+        # Maybe we can add the “fed fourth wind pung/third dragon
+        # pung” here.
 
     def addHandRules(self):
         """Define rules for the hand. They are not used for Japaneses style."""
@@ -434,7 +435,8 @@ Mahjong on the discard after the last tile in the wall. (Houtei)''')))
         # winningTileCandidates() method
         self.mjRules.add(Rule(
                 'Standard mahjong', 'FStandardMahJongg', points=20))
-        # self.mjRules.add(Rule('Seven pairs', 'FSevenPairs', doubles=2, points=25))
+        # self.mjRules.add(Rule(
+        #         'Seven pairs', 'FSevenPairs', doubles=2, points=25))
         self.mjRules.add(Rule(
                 'Thirteen Orphans', 'FThirteenOrphans||Omayrobhiddenkong',
                 doubles=13, description=m18n('''\
@@ -624,8 +626,7 @@ Hand with three pungs/kongs of winds and a pair of. Double yakuman. \
         #     Rule('Last Tile Completes Pair of 2..8',
         #          'FLastTileCompletesPairMinor', points=2))
 
-        # Points for the hand. Only the winner gets points, but
-        # calling these “winnerRules” seems to not work.
+        # Points for the hand.
         # First the yaku melds
         self.meldRules.add(Rule(
                 'Dragons pung', 'FDragonPungKong', doubles=1, description=m18n(
