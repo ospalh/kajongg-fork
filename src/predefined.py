@@ -435,8 +435,8 @@ Mahjong on the discard after the last tile in the wall. (Houtei)''')))
         # winningTileCandidates() method
         self.mjRules.add(Rule(
                 'Standard mahjong', 'FStandardMahJongg', points=20))
-        # self.mjRules.add(Rule(
-        #         'Seven pairs', 'FSevenPairs', doubles=2, points=25))
+        self.mjRules.add(Rule(
+                'Seven pairs', 'FSevenPairs', doubles=2, points=25))
         self.mjRules.add(Rule(
                 'Thirteen Orphans', 'FThirteenOrphans||Omayrobhiddenkong',
                 doubles=13, description=m18n('''\
@@ -530,7 +530,7 @@ any one extra tile in the same suit. (Chuuren pooto)''')))
                 description=m18n(u'''\
 Hand with three hidden pungs. (Complete hand may be open.) (San ankou)''')))
         self.winnerRules.add(Rule(
-                'All pungs', 'FNoChow', doubles=2, description=u'''\
+                'All pungs', 'FAllPungs', doubles=2, description=u'''\
 Hand with four pungs/kongs and a pair. (Toi-toi hou)'''))
         # self.winnerRules.add(
         #     Rule('Open half flush', 'FOpenHalfFlush', doubles=2,

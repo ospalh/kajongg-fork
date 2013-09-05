@@ -170,6 +170,22 @@ class NoChow(Function):
     def appliesToHand(hand):
         return not any(x.isChow() for x in hand.melds)
 
+class AllPungs(Function):
+    u"""
+    Two fan yaku "all pungs"
+
+    The all pungs yaku is different from no chow above. No chow
+    applies to seven pairs (correctly or not), this does not.
+    """""
+    @staticmethod
+    def appliesToHand(hand):
+        pung_kong_count = 0
+        for meld in hand.melds:
+            if meld.isPung() or meld.isKong():
+                pung_kong_count += 1
+        return (4 == pung_kong_count)
+
+
 class OnlyConcealedMelds(Function):
     @staticmethod
     def appliesToHand(hand):
@@ -570,6 +586,94 @@ class AllPairHonors(Function):
                     candidate.keep -= keep / 2
                 else:
                     candidate.keep += keep
+        return candidates
+
+
+class SevenPairs(Function):
+    u"""
+    The mahjong hand seven pairs.
+
+    Class to define the winnig hand seven pairs. Differences to
+    AllPairHonors: 2–8 tiles are allowed, and kongs (seen as two
+    pairs) are not.
+    """
+
+    @staticmethod
+    def computeLastMelds(hand):
+        return [Meld([hand.lastTile, hand.lastTile])]
+
+    @staticmethod
+    def claimness(hand, dummyDiscard):
+        result = IntDict()
+        if SevenPairs.shouldTry(hand):
+            result[Message.Pung] = -999
+            result[Message.Kong] = -999
+            result[Message.Chow] = -999
+        return result
+
+    @staticmethod
+    def maybeCallingOrWon(hand):
+        return len(hand.declaredMelds) < 2
+
+    def appliesToHand(self, hand):
+        if not self.maybeCallingOrWon(hand):
+            return False
+        melds = hand.melds
+        if len(melds) != 7:
+            return False
+        for meld in melds:
+            if not meld.isPair():
+                return False
+        return True  # No meld that is not a pair
+
+    def winningTileCandidates(self, hand):
+        if not self.maybeCallingOrWon(hand):
+            return set()
+        single = list(
+            x for x in hand.tileNames if hand.tileNames.count(x) == 1)
+        if len(single) != 1:
+            return set()
+        return set(single)
+
+    @staticmethod
+    def shouldTry(hand, maxMissing=4):
+        if hand.declaredMelds:
+            return False
+        melds = hand.melds
+        tiles = list(x.lower() for x in hand.tileNames)
+        pair_count = 0
+        for meld in melds:
+            if meld.isPair():
+                pair_count += 1
+        pairWanted = 7 - maxMissing / 2  # count pairs
+        result = (pair_count >= (7 - maxMissing / 2))
+        if pairCount > 5:
+            hand.debug(
+                'have {0} pairs for SevenPairs: {1}'.format(
+                    pair_count, hand.tileNames))
+        return result
+
+    @staticmethod
+    def rearrange(dummyHand, pairs):
+        melds = []
+        for pair in set(pairs):
+            while pairs.count(pair) >= 2:
+                melds.append(Meld(pair * 2))
+                pairs.remove(pair)
+                pairs.remove(pair)
+        return melds, pairs
+
+    @staticmethod
+    def weigh(dummyAiInstance, candidates):
+        hand = candidates.hand
+        if not SevenPairs.shouldTry(hand):
+            return candidates
+        keep = 10
+        for candidate in candidates:
+            if candidate.occurrence == 3:
+                candidate.keep -= keep / 2
+            else:
+                candidate.keep += keep
         return candidates
 
 
