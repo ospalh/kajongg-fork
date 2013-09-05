@@ -435,8 +435,17 @@ Mahjong on the discard after the last tile in the wall. (Houtei)''')))
         # winningTileCandidates() method
         self.mjRules.add(Rule(
                 'Standard mahjong', 'FStandardMahJongg', points=20))
+        # self.mjRules.add(Rule(
+        #         'Standard ron', 'FStandardRon', points=30))
+        # self.mjRules.add(Rule(
+        #         'Standard tsumo', 'FStandardTsumo', points=20))
         self.mjRules.add(Rule(
-                'Seven pairs', 'FSevenPairs', doubles=2, points=25))
+                'Seven pairs', 'FSevenPairs||Ono_other_points', doubles=2,
+                points=25))
+        # New option no_other_points. “Seven Pairs always scores
+        # exactly 25 minipoints; extra minipoints (fu) for e.g. a pair of
+        # dragons is not awarded.” This is different from Oabsolute,
+        # as extra han are counted (afais).
         self.mjRules.add(Rule(
                 'Thirteen Orphans', 'FThirteenOrphans||Omayrobhiddenkong',
                 doubles=13, description=m18n('''\
@@ -456,22 +465,21 @@ any one extra tile in the same suit. (Chuuren pooto)''')))
 # Concealed waiting hand declared at 1000 points stake. (Riichi)''')))
         self.winnerRules.add(Rule(
                 'Fully concelaned hand', 'FOnlyConcealedMelds', doubles=1,
-                points=10, description=m18n(
+                description=m18n(
                     u'Selfdraw on a concealed hand (Menzen tsumo)')))
-        # The 10 points should deal with the "concealed on selfdraw =
-        # 30, else 20" rule.
 
         # self.winnerRules.add(
         #     Rule('All simples', 'FAllSimples', doubles=1,
         #         description=m18n(u'''\
 # Concealed hand with no terminals and honours. (Tanyao chuu) ''')))
 
-        # Maybe pinfu must be declared as a mjRule, because of the
-        # two-sided chow waiting condition ()
         # self.winnerRules.add(
-        #     Rule('Pinfu', 'FPinfu', doubles=1,
+        #     Rule('Pinfu', 'FPinfu||Ono_other_points', doubles=1
         #          description=m18n(
         #             ' Concealed all chows hand with a valueless pair.')))
+
+        # N.B.: the appliesToHand and Candidate functions must
+        # implement the two-sided wait condition.
         # self.winnerRules.add(
         #    Rule('Pure double chow', 'FPureDoubleChow', doubles=1,
         #          description=m18n(u'''\
@@ -596,8 +604,7 @@ Hand containing only terminals and honours. (Honroutou)''')))
         self.winnerRules.add(Rule(
                 'Four kongs', 'FFourfoldPlenty', doubles=13,
                 description=m18n('Hand with four kongs (Suu kan tsu)')))
-        self.winnerRules.add(
-            Rule(
+        self.winnerRules.add(Rule(
                 'All green', 'FAllGreen',  doubles=13, description=m18n(
                     u''' Hand composed entirely of green tiles. Green tiles \
 are: green dragons 2, 3, 4, 6 and 8 of bamboo (Ryuu iisou)''')))
@@ -622,6 +629,7 @@ Hand with three pungs/kongs of winds and a pair of. Double yakuman. \
 (Dai suushi)''')))
 
         # Here we should add the waiting pattern rules.
+        # and the 2 open(!) pinfu points.
         # self.winnerRules.add(
         #     Rule('Last Tile Completes Pair of 2..8',
         #          'FLastTileCompletesPairMinor', points=2))
