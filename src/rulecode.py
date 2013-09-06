@@ -192,6 +192,27 @@ class OnlyConcealedMelds(Function):
     def appliesToHand(hand):
         return not any((x.state == EXPOSED and x.meldType != CLAIMEDKONG) for x in hand.melds)
 
+
+class MostlyConcealed(Function):
+    u"""
+    A hand that counts as concealed for Japanese rules.
+
+    This is true if the hand is fully concealed or was untill the last
+    tile was called.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        exp = [x for x in hand.melds if x.state == EXPOSED]
+        if not exp:
+            hand.debug(u'Too many ({}) open melds.'.format(len(exp)))
+            return True
+        if len(exp) > 1:
+            return False
+        hand.debug(u'Exatly one open meld')
+        hand.debug(u'is it the last meld? {}'.format((exp[0] == hand.lastMeld)))
+        return exp[0] == hand.lastMeld
+
+
 class FalseColorGame(Function):
     @staticmethod
     def appliesToHand(hand):
@@ -986,6 +1007,27 @@ class StandardMahJongg(Function):
                 bestHand = tryHand
                 bestVariant = variantMelds
         return bestVariant, []
+
+
+class StandardConcealedRon(StandardMahJongg):
+    u"""
+    Standard mahjong on a discard.
+
+    This is one of the two standard mahjongs used with Japanese rules.
+    """
+    @staticmethod
+    def computeLastMelds(hand):
+        return StandardMahJongg.computeLastMelds(hand)
+
+    @staticmethod
+    def appliesToHand(hand):
+        u"""Check if it is a standard mahjongg and self-drawn."""
+        if not StandardMahJongg.appliesToHand(hand):
+            return False
+        if not hand.lastSource or not hand.lastSource in 'dkZ':
+            return False  # self-drawn
+        return MostlyConcealed.appliesToHand(hand)
+
 
 class GatesOfHeaven(Function):
     def __init__(self):

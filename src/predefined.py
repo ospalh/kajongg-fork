@@ -435,10 +435,8 @@ Mahjong on the discard after the last tile in the wall. (Houtei)''')))
         # winningTileCandidates() method
         self.mjRules.add(Rule(
                 'Standard mahjong', 'FStandardMahJongg', points=20))
-        # self.mjRules.add(Rule(
-        #         'Standard ron', 'FStandardRon', points=30))
-        # self.mjRules.add(Rule(
-        #         'Standard tsumo', 'FStandardTsumo', points=20))
+        self.mjRules.add(Rule(
+                'Standard concealed ron', 'FStandardConcealedRon', points=30))
         self.mjRules.add(Rule(
                 'Seven pairs', 'FSevenPairs||Ono_other_points', doubles=2,
                 points=25))
@@ -629,7 +627,7 @@ Hand with three pungs/kongs of winds and a pair of. Double yakuman. \
 (Dai suushi)''')))
 
         # Here we should add the waiting pattern rules.
-        # and the 2 open(!) pinfu points.
+        # and the 2 (read 10) open(!) pinfu points.
         # self.winnerRules.add(
         #     Rule('Last Tile Completes Pair of 2..8',
         #          'FLastTileCompletesPairMinor', points=2))
