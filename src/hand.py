@@ -482,10 +482,14 @@ class Hand(object):
             self.melds.extend(self.splitRegex(rest))
             return
         arrangements = []
+        stdMJ = None
         for mjRule in self.ruleset.mjRules:
             func = mjRule.function
             if func.__class__.__name__ == 'StandardMahJongg':
                 stdMJ = func
+        if not stdMJ:
+            # If there is no rule called 'StandardMahJongg', use the first mahjongg rule as standard.
+            stdMJ = self.ruleset.mjRules[0].function
         if self.mjRule:
             rules = [self.mjRule]
         else:
