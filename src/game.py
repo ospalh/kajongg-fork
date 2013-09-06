@@ -593,8 +593,10 @@ class Game(object):
             winds = winds[3:] + winds[0:3]
             for idx, newWind in enumerate(winds):
                 self.players[idx].wind = newWind
-            if self.roundsFinished % 4 and self.rotated == 0:
-                # exchange seats between rounds
+            if self.roundsFinished % 4 and self.rotated == 0 \
+                    and not self.ruleset.basicStyle == Ruleset.Japanese:
+                # Exchange seats between rounds, but not for Japanese
+                # games.
                 self.__exchangeSeats()
 
     def debug(self, msg, btIndent=None):
