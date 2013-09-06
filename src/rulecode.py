@@ -204,13 +204,11 @@ class MostlyConcealed(Function):
     def appliesToHand(hand):
         exp = [x for x in hand.melds if x.state == EXPOSED]
         if not exp:
-            hand.debug(u'Too many ({}) open melds.'.format(len(exp)))
             return True
         if len(exp) > 1:
             return False
-        hand.debug(u'Exatly one open meld')
-        hand.debug(u'is it the last meld? {}'.format((exp[0] == hand.lastMeld)))
-        return exp[0] == hand.lastMeld
+        return hand.lastMeld and exp[0] == hand.lastMeld
+        # Do we always have a last meld? Just make sure.
 
 
 class FalseColorGame(Function):
