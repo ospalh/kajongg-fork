@@ -1,6 +1,7 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 ; mode: python -*-
 
 """Copyright (C) 2009-2012 Wolfgang Rohdewald <wolfgang@rohdewald.de>
+Copyright © 2013 Roland Sieker <ospalh@gmail.com>
 
 kajongg is free software you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
