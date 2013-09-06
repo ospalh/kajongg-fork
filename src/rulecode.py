@@ -648,7 +648,7 @@ class SevenPairs(Function):
                 pair_count += 1
         pairWanted = 7 - maxMissing / 2  # count pairs
         result = (pair_count >= (7 - maxMissing / 2))
-        if pairCount > 5:
+        if pair_count > 5:
             hand.debug(
                 'have {0} pairs for SevenPairs: {1}'.format(
                     pair_count, hand.tileNames))
