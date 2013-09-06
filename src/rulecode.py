@@ -207,8 +207,13 @@ class MostlyConcealed(Function):
             return True
         if len(exp) > 1:
             return False
-        return hand.lastMeld and exp[0] == hand.lastMeld
-        # Do we always have a last meld? Just make sure.
+        try:
+            return exp[0] == hand.lastMeld  # EAFP
+        except AttributeError:
+            # Even “if hand.lastMeld” does not work when we have not
+            # already won.
+            return False
+
 
 
 class FalseColorGame(Function):
