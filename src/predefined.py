@@ -532,7 +532,8 @@ any one extra tile in the same suit. (Chuuren pooto)''')))
 # Hand with three pungs/kongs, one in each suit, of the same
 # number. (San shoku dokou)'''))
         self.winnerRules.add(Rule(
-                'Three concealend pungs', 'FThreeConcealedPongs', doubles=2,
+                'Three concealend pungs',
+                'FThreeConcealedPungsOrKongs', doubles=2,
                 description=m18n(u'''\
 Hand with three hidden pungs. (Complete hand may be open.) (San ankou)''')))
         self.winnerRules.add(Rule(

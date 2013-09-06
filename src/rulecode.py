@@ -1215,6 +1215,22 @@ class ThreeConcealedPongs(Function):
         return len([x for x in hand.melds if (
             x.state == CONCEALED or x.meldType == CLAIMEDKONG) and (x.isPung() or x.isKong())]) >= 3
 
+
+class ThreeConcealedPungsOrKongs(Function):
+    u"""
+    Three concealend pungs or kongs.
+
+    A hand with three concealend pungs or kongs. The difference to
+    ThreeConcealedPongs is that for this claimed kongs (i.e. kongs
+    that started out as hidden pungs do not count.)
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        return len(
+            [x for x in hand.melds
+             if x.state == CONCEALED and x.isPungOrKong()]) >= 3
+
+
 class MahJonggWithOriginalCall(Function):
     @staticmethod
     def appliesToHand(hand):
