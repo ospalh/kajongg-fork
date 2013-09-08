@@ -202,18 +202,17 @@ class MostlyConcealed(Function):
     """
     @staticmethod
     def appliesToHand(hand):
-        exp = [x for x in hand.melds if x.state == EXPOSED]
-        if not exp:
+        exposed = [x for x in hand.melds if x.state == EXPOSED]
+        if not exposed:
             return True
-        if len(exp) > 1:
+        if len(exposed) > 1:
             return False
-        try:
-            return exp[0] == hand.lastMeld  # EAFP
-        except AttributeError:
-            # Even “if hand.lastMeld” does not work when we have not
-            # already won.
-            return False
-
+        # So here len(exposed() is 1.
+        if hand.lastSource and hand.lastSource in 'dkZ':
+            # Ron
+            return True
+        # Not ron, but an exposed meld
+        return False
 
 
 class FalseColorGame(Function):
