@@ -539,7 +539,13 @@ class Table(object):
         block.callback(self.dealt)
 
     def endHand(self, dummyResults=None):
-        """hand is over, show all concealed tiles to all players"""
+        """
+        Deal with the hand being over,
+
+        Show the concealed tiles of all players (Chinese style) or of
+        those that have to (Japanese stile) to all players. Also do
+        the scoring by calling saveHand
+        """
         if not self.game:
             return
         if self.game.playOpen:
@@ -548,9 +554,12 @@ class Table(object):
             block = DeferredBlock(self)
             for player in self.game.players:
                 # there might be no winner, winner.others() would be wrong
-                if player != self.game.winner:
-                    # the winner tiles are already shown in claimMahJongg
-                    block.tellOthers(player, Message.ShowConcealedTiles, show=True,
+                if player != self.game.winner and player.shouldShowTiles():
+                    # The winner tiles are already shown in
+                    # claimMahJongg. With Japanese rules, some players
+                    # do not show their tiles.
+                    block.tellOthers(
+                        player, Message.ShowConcealedTiles, show=True,
                         source=player.concealedTileNames)
             block.callback(self.saveHand)
 
