@@ -489,6 +489,39 @@ class Player(object):
                     afterExposed.remove(tileName.lower())
         return all(self.game.dangerousFor(self, x) for x in afterExposed)
 
+    def shouldShowTiles(self):
+        u"""
+        Return whether we should show the tiles at the end of a hand.
+
+        For Chinese style games, this always returns true, as the
+        losers hand are also evaluated.
+        For Japanese style, the rules are quite complex:
+        * When there are winners, only their hands are shown.
+        * When four riichi declarations cause an abortive draw, the
+          tenpai hands must be shown
+        * While not explicit in the EMA rules, when claiming an
+          abortive draw because of nine or more terminals/honours, the
+          hand should be shown.
+        * On an exhaustive draw, all players that have declared riichi
+          and players that are tenpai and do not want to pay the noten
+          penalty must show their hands.
+        Not all the rules are implemented yet.
+        """
+        if self.game.ruleset.basicStyle != Ruleset.Japanese \
+                or self.game.isScoringGame():
+            # Standard. Do show.
+            return True
+        # “Not all the rules” is a bit of a boast. At the moment we
+        # show the winner hand.
+        if self is self.game.winner:
+            # We have won. Show.
+            print('Winner! Show tiles.')
+            return True
+        # Riichi, abortive draws and noten penalties are not
+        # implemented yet.
+        print('Loser. Don’t show tiles.')
+        return False
+
     def exposeMeld(self, meldTiles, calledTile=None):
         """exposes a meld with meldTiles: removes them from concealedTileNames,
         adds the meld to exposedMelds and returns it
