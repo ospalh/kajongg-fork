@@ -166,6 +166,8 @@ class Game(object):
             # pylint: disable=W0212
             if self.__winner != value:
                 if self.__winner:
+                    # Hmm. This looks like a bit of code that needs
+                    # changing to allow multiple winners.
                     self.__winner.invalidateHand()
                 self.__winner = value
                 if value:
@@ -692,6 +694,10 @@ class Game(object):
         """pay the scores"""
         # pylint: disable=R0912
         # too many branches
+        if False and self.ruleset.basicStyle == Ruleset.Japanese:
+            # Japanese scoring is so different that it is easier to
+            # just put it in an extra method.
+            return __payJapaneseHand()
         winner = self.__winner
         if winner:
             winner.wonCount += 1
@@ -724,6 +730,28 @@ class Game(object):
                         player1.getsPayment(player1.handTotal * efactor)
                     if player1 != winner:
                         player1.getsPayment(-player2.handTotal * efactor)
+
+    def __payJapaneseHand():
+        u"""
+        Pay the points for a hand, Japanese style
+        """
+        winner = self.__winner
+        if winner:
+            winner.wonCount += 1
+            if Debug.explain:
+                self.debug('%s: %s' % (winner, winner.hand.string))
+                for line in winner.hand.explain():
+                    self.debug('   %s' % (line))
+            # Here we should implement the value tables.
+            points, doubles = winner.handPointsDoubles
+
+            for loser in self.players:
+                if loser is winner:
+                    # Erm, not a loser after all.
+                    continue
+
+
+
 
     def lastMoves(self, only=None, without=None):
         """filters and yields the moves in reversed order"""
