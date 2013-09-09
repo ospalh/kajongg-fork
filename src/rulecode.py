@@ -22,6 +22,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 Read the user manual for a description of the interface to this scoring engine
 """
 
+from collections import Counter
+
 from meld import Meld, CONCEALED, EXPOSED, CLAIMEDKONG, REST, elementKey
 from common import elements, IntDict
 from message import Message
@@ -621,7 +623,8 @@ class AllSimples(Function):
     rules, this must be concealed* in Europe, but not so in Japan.
     """
     def appliesToHand(self, hand):
-        all_are_simples = all(x[1] in '2345678' for x in hand.tileNames)
+        # all_are_simples = all([x[1] in '2345678' for x in hand.values])
+        all_are_simples = not set(hand.values) - set('2345678')
         if not all_are_simples:
             return False
         return ('may_be_open' in self.options) \
@@ -643,7 +646,7 @@ class PureDoubleChow(Function):
         # The MC could go above the chows =
         if not MostlyConcealed.appliesToHand(hand):
             return False
-        if len(chows < 2):
+        if len(chows) < 2:
             return False
         for n, chow1 in enumerate(chows[:-1]):
             for chow2 in chows[n+1:]:
@@ -659,11 +662,16 @@ class PureDoubleChow(Function):
 class TripleChow(Function):
     @staticmethod
     def appliesToHand(hand):
-        chow_tiles = [meld.pairs.lower() for meld in hand.melds \
-                          if meld.isChow()].sort()
-        if len(chow_tiles) < 3:
-            return False
-        return False  # Todo
+        chow_start_tiles = [meld.pairs[0].lower() for meld in hand.melds
+                            if meld.isChow()]
+        print('chow start tiles: {}'.format(chow_start_tiles))
+        (most_common_chow, ) = Counter(
+            [cst[1] for cst in chow_start_tiles]).most_common(1)
+        # if most_common_chow[1] < 3:
+        #     return False
+        return 'b' + most_common_chow[0] in chow_start_tiles \
+            and 'c' + most_common_chow[0] in chow_start_tiles \
+            and 's' + most_common_chow[0] in chow_start_tiles
 
 
 class TripleChowBonus(Function):
