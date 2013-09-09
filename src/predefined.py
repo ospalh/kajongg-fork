@@ -404,7 +404,7 @@ Mahjong on the discard after the last tile in the wall. (Houtei)''')))
     def addPenaltyRules(self):
         """Set penalty rules"""
         # There are two types of penalty the software can deal with in
-        # theaory, dead hand and chombo. TODO.
+        # theory, dead hand and chombo. TODO.
         self.penaltyRules.add(Rule(
                 'Long Hand', r'FLongHand||Oabsolute', points=0, doubles=0,
                 description=m18n('The hand contains too many tiles')))
@@ -466,33 +466,37 @@ any one extra tile in the same suit. (Chuuren pooto)''')))
                 description=m18n(
                     u'Selfdraw on a concealed hand (Menzen tsumo)')))
 
+        self.winnerRules.add(
+            Rule('All simples', 'FAllSimples', doubles=1,
+                 description=m18n(u'''\
+Concealed hand with no terminals and honours. (Tanyao chuu)''')))
         # self.winnerRules.add(
-        #     Rule('All simples', 'FAllSimples', doubles=1,
+        #     Rule('All simples', 'FAllSimples||Omay_be_open', doubles=1,
         #         description=m18n(u'''\
-# Concealed hand with no terminals and honours. (Tanyao chuu) ''')))
+# Hand with no terminals and honours. (Tanyao chuu)''')))
 
         # self.winnerRules.add(
         #     Rule('Pinfu', 'FPinfu||Ono_other_points', doubles=1
         #          description=m18n(
         #             ' Concealed all chows hand with a valueless pair.')))
-
         # N.B.: the appliesToHand and Candidate functions must
         # implement the two-sided wait condition.
-        # self.winnerRules.add(
-        #    Rule('Pure double chow', 'FPureDoubleChow', doubles=1,
-        #          description=m18n(u'''\
-# Concealed hand with two completely identical chows, i.e. the same
-# values in the same suit. (Iipeikou) ''')))
-        # self.winnerRules.add(
-        #     Rule('Open mixed triple chow', 'FOpenTripleChow', doubles=1,
-        #          description=m18n(u'''\
-# Hand with three chows of the same numerical sequence, one in each \
-# suit, open.  (San shoku doujun) ''')))
-        # self.winnerRules.add(
-        #     Rule('Concealend mixed triple chow', 'FConcealendTripleChow',
-        #          doubles=1, description=m18n(u'''\
-# Hand with three chows of the same numerical sequence, one in each \
-# suit, concealend.  (San shoku doujun)''')))
+
+        self.winnerRules.add(
+            Rule('Pure double chow', 'FPureDoubleChow', doubles=1,
+                  description=m18n(u'''\
+Concealed hand with two completely identical chows, i.e. the same \
+values in the same suit. (Iipeikou) ''')))
+        self.winnerRules.add(
+            Rule('Mixed triple chow', 'FTripleChow', doubles=1,
+                 description=m18n(u'''\
+Hand with three chows of the same numerical sequence, one in each \
+suit.  (San shoku doujun) ''')))
+        self.winnerRules.add(
+             Rule('Concealed mixed triple chow bonus', 'FTripleChowBonus',
+                  doubles=1, description=m18n(u'''\
+Bonus yaku for a mixed triple chow hand being concealed. \
+(San shoku doujun)''')))
         # self.winnerRules.add(
         #     Rule('Open pure straight', 'FOpenPureStraight', doubles=1
         #         description=u'''\
@@ -724,6 +728,12 @@ Hand with three pungs/kongs of winds and a pair of. Double yakuman. \
                 'boolmustDeclareCallingHand||Omandatory', parameter=False,
                 description=m18n(
                     'Only riichi must be declared.')))
+        # self.parameterRules.add(Rule(
+        #         u'“All simples” may be open.',
+        #        'boolall_simples_may_be_open||Omandatory', parameter=False,
+        #        description=m18n(u'''\
+# Different Japanese rule codes do or do not require that the “All simples” \
+# hand be concealed.''')))
 
 
 def loadPredefinedRulesets():

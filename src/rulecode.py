@@ -184,7 +184,7 @@ class AllPungs(Function):
         for meld in hand.melds:
             if meld.isPung() or meld.isKong():
                 pung_kong_count += 1
-        return (4 == pung_kong_count)
+        return 4 == pung_kong_count
 
 
 class OnlyConcealedMelds(Function):
@@ -611,6 +611,66 @@ class AllPairHonors(Function):
                 else:
                     candidate.keep += keep
         return candidates
+
+
+class AllSimples(Function):
+    u"""
+    A hand that consists only of 2–8 tiles.
+
+    A hand that consists only of 2–8 tiles.  According to the EMA
+    rules, this must be concealed* in Europe, but not so in Japan.
+    """
+    def appliesToHand(self, hand):
+        all_are_simples = all(x[1] in '2345678' for x in hand.tileNames)
+        if not all_are_simples:
+            return False
+        return ('may_be_open' in self.options) \
+            or MostlyConcealed.appliesToHand(hand)
+
+
+class PureDoubleChow(Function):
+    u"""
+    Concealed hand with two identical chows.
+
+    Concealed* hand with two identical chows, that is with the same
+    numbers in the same suite.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        chows = [meld for meld in hand.melds if meld.isChow()]
+        for chow in chows:
+            print('have chow {}'.format(chow.pairs))
+        # The MC could go above the chows =
+        if not MostlyConcealed.appliesToHand(hand):
+            return False
+        if len(chows < 2):
+            return False
+        for n, chow1 in enumerate(chows[:-1]):
+            for chow2 in chows[n+1:]:
+                if chow1 == chow2:
+                    print(u'Yeah, {} is just like {}'.format(chow1.tileNames, chow2.tileNames))
+                    return True
+                else:
+                    print(u'Oh well, {} is not like {}'.format(chow1.tileNames, chow2.tileNames))
+        # After the loop: none of the “==” tests matched.
+        return False
+
+
+class TripleChow(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        chow_tiles = [meld.pairs.lower() for meld in hand.melds \
+                          if meld.isChow()].sort()
+        if len(chow_tiles) < 3:
+            return False
+        return False  # Todo
+
+
+class TripleChowBonus(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        return MostlyConcealed.appliesToHand(hand) \
+            and TripleChow.appliesToHand(hand)
 
 
 class SevenPairs(Function):
