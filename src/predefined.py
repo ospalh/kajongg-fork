@@ -497,28 +497,24 @@ suit.  (San shoku doujun) ''')))
                   doubles=1, description=m18n(u'''\
 Bonus yaku for a mixed triple chow hand being concealed. \
 (San shoku doujun)''')))
+        self.winnerRules.add(
+            Rule('Pure straight', 'FPureStraight', doubles=1,
+                 description=u'''\
+Hand with three consecutive chows in the same suit. (Itsu)'''))
+        self.winnerRules.add(
+             Rule('Concealed pure straight bonus', 'FPureStraightBonus',
+                  doubles=1, description=m18n(u'''\
+Bonus yaku for a pure straight hand being concealed. \
+(Itsu)''')))
         # self.winnerRules.add(
-        #     Rule('Open pure straight', 'FOpenPureStraight', doubles=1
-        #         description=u'''\
-# Hand with three consecutive chows in the same suit, open. (Itsu)'''))
-        # self.winnerRules.add(
-        #     Rule('Concealend pure straight', 'FConcielaedPureStraight',
-        #          doubles=2
-        #          description=u'''\
-# Hand with three consecutive chows in the same suit, concealend. (Itsu)'''))
-
-        # self.winnerRules.add(
-        #     Rule('Open outside hand', 'FOpenOutsideHand', doubles=1,
+        #     Rule('Open outside hand', 'FOutsideHand', doubles=1,
         #     description=m18n('''\
 # All sets contain terminals or honours, and the pair is \
-# terminals or honours. The hand contains at least one chow. \
-# Open. (Chanta)''')))
+# terminals or honours. The hand contains at least one chow. (Chanta)''')))
         # self.winnerRules.add(
-        #     Rule('Concealend outside hand', 'FConcealendOutsideHand',
-        #    doubles=2, description=m18n('''\
-# All sets contain terminals or honours, and the pair is \
-# terminals or honours. The hand contains at least one chow. \
-# Concealend. (Chanta)''')))
+        #     Rule('Concealend outside hand bonus', 'FOutsideHandBonus',
+        #    doubles=1, description=m18n('''\
+# Bonus yaku for an outside hand being concealed. (Chanta)''')))
 
         # Four more one-yake are in addManualRules(), as you can’t
         # recoginze them from just the tiles:
@@ -536,23 +532,21 @@ Bonus yaku for a mixed triple chow hand being concealed. \
 # Hand with three pungs/kongs, one in each suit, of the same
 # number. (San shoku dokou)'''))
         self.winnerRules.add(Rule(
-                'Three concealend pungs',
-                'FThreeConcealedPungsOrKongs', doubles=2,
-                description=m18n(u'''\
+                'Three concealend pungs', 'FThreeConcealedPungsOrKongs',
+                doubles=2, description=m18n(u'''\
 Hand with three hidden pungs. (Complete hand may be open.) (San ankou)''')))
         self.winnerRules.add(Rule(
                 'All pungs', 'FAllPungs', doubles=2, description=u'''\
 Hand with four pungs/kongs and a pair. (Toi-toi hou)'''))
-        # self.winnerRules.add(
-        #     Rule('Open half flush', 'FOpenHalfFlush', doubles=2,
-        #          description=m18n('''\
-# Hand with tiles from only one of the three suits, in combination with \
-# honours, open. (Honitsu) ''')))
-        # self.winnerRules.add(
-        #     Rule('Concealend half flush', 'FConcealedHalfFlush', doubles=3,
-        #          description=m18n('''\
-# Hand with tiles from only one of the three suits, in combination with \
-# honours, concealed. (Honitsu) ''')))
+        self.winnerRules.add(Rule(
+                'Half flush', 'FFalseColorGame', doubles=2,
+                description=m18n('''\
+Hand with tiles from only one of the three suits, in combination with \
+honours. (Honitsu) ''')))
+        self.winnerRules.add(
+            Rule('Concealed half flush bonus', 'FHalfFlushBonus',
+                 doubles=1, description=m18n('''\
+Bonus yaku for a half flush hand being concealed. (Honitsu) ''')))
         self.handRules.add(Rule(
                 'Little three dragons', 'FLittleThreeDragons', doubles=2,
                 description=m18n(u'''\
@@ -580,14 +574,15 @@ Hand containing only terminals and honours. (Honroutou)''')))
 
         # Five yaku (Starting at five fan (yaku + dora) the
         # fu/minipoints/points are always ignored)
-        # self.winnerRules.add(
-        #     Rule('Open full flush', 'FOpenFullFlush', doubles=5,
-        #          description=m18n('''\
-# Hand with tiles from only one of the three suits, open. (Chinitsu) ''')))
-        # self.winnerRules.add(
-        #     Rule('Concealend full flush', 'FConcealedFullFlush', doubles=6,
-        #          description=m18n('''\
-# Hand with tiles from only one of the three suits, concealed. (Chinitsu) ''')))
+        self.winnerRules.add(Rule(
+                'Full flush', 'FTrueColorGame', doubles=5,
+                description=m18n('''\
+Hand composed entirely of tiles from only one of the three suits. No \
+honours allowed. (Chinitsu)''')))
+        self.winnerRules.add(
+            Rule('Concealed full flush bonus', 'FFullFlushBonus',
+                 doubles=1, description=m18n('''\
+Bonus yaku for a full flush hand being concealed. (Chinitsu)''')))
 
         # Nagashi mangan is dealt with during scoring. Maybe we can
         # use the nine east wins as inspiration.
@@ -597,13 +592,15 @@ Hand containing only terminals and honours. (Honroutou)''')))
         # The Blessings of NN (first round win) are at manualRules,
         # as they have to be checked by hand for manual scoring.
 
-        # FFourConcealedPungs probably has to be added to mjRules, as
-        # there is the extra condition “Winning on a discard is
-        # allowed only in case of single wait on the pair.”
-        # self.winnerRules.add(
-        #     Rule('Four concealed pungs', 'FFourConcealedPungs', doubles=13,
-        #          description=m18n(
-        #             'Concealend hand with four pungs/kongs (Suu ankou)')))
+        # The extra “rule” “Winning on a discard is allowed only in
+        # case of single wait on the pair.” for “Four concealed pungs”
+        # is actually a tautology. When you call any of the four
+        # pungs, even as the last tile, that last pung is not
+        # concealed, even if the whole hand is concealed*.
+        self.winnerRules.add(Rule(
+                'Four concealed pungs', 'FFourConcealedPungsOrKongs',
+                doubles=13, description=m18n(
+                    'Concealend hand with four pungs/kongs (Suu ankou)')))
         self.winnerRules.add(Rule(
                 'Four kongs', 'FFourfoldPlenty', doubles=13,
                 description=m18n('Hand with four kongs (Suu kan tsu)')))
@@ -709,7 +706,7 @@ Hand with three pungs/kongs of winds and a pair of. Double yakuman. \
         # This should be 1. Until we have riichi declaration up and
         # running, use 0 instead.
         self.parameterRules.add(
-            Rule('Claim Timeout', 'intclaimTimeout||Omandatory', parameter=3))
+            Rule('Claim Timeout', 'intclaimTimeout||Omandatory', parameter=5))
         # The EMA rules say 3s. May be too quick for beginners.
         self.parameterRules.add(Rule(
                 'Play with Bonus Tiles', 'boolwithBonusTiles||OMandatory',

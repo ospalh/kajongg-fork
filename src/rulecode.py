@@ -223,10 +223,26 @@ class FalseColorGame(Function):
         dwSet = set('dw')
         return dwSet & hand.suits and len(hand.suits - dwSet) == 1
 
+
+class HalfFlushBonus(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        return MostlyConcealed.appliesToHand(hand) \
+            and FalseColorGame.appliesToHand(hand)
+
+
 class TrueColorGame(Function):
     @staticmethod
     def appliesToHand(hand):
         return len(hand.suits) == 1 and hand.suits < set('sbc')
+
+
+class FullFlushBonus(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        return MostlyConcealed.appliesToHand(hand) \
+            and TrueColorGame.appliesToHand(hand)
+
 
 class Purity(Function):
     @staticmethod
@@ -640,21 +656,17 @@ class PureDoubleChow(Function):
     """
     @staticmethod
     def appliesToHand(hand):
-        chows = [meld for meld in hand.melds if meld.isChow()]
-        for chow in chows:
-            print('have chow {}'.format(chow.pairs))
-        # The MC could go above the chows =
         if not MostlyConcealed.appliesToHand(hand):
             return False
+        chows = [meld for meld in hand.melds if meld.isChow()]
         if len(chows) < 2:
             return False
-        for n, chow1 in enumerate(chows[:-1]):
-            for chow2 in chows[n+1:]:
+        for count, chow1 in enumerate(chows[:-1]):
+            for chow2 in chows[count + 1:]:
                 if chow1 == chow2:
-                    print(u'Yeah, {} is just like {}'.format(chow1.tileNames, chow2.tileNames))
+                    hand.debug(u'Yeah, {} is just like {}'.format(
+                            chow1.pairs, chow2.pairs))
                     return True
-                else:
-                    print(u'Oh well, {} is not like {}'.format(chow1.tileNames, chow2.tileNames))
         # After the loop: none of the “==” tests matched.
         return False
 
@@ -664,11 +676,12 @@ class TripleChow(Function):
     def appliesToHand(hand):
         chow_start_tiles = [meld.pairs[0].lower() for meld in hand.melds
                             if meld.isChow()]
-        print('chow start tiles: {}'.format(chow_start_tiles))
-        (most_common_chow, ) = Counter(
-            [cst[1] for cst in chow_start_tiles]).most_common(1)
-        # if most_common_chow[1] < 3:
-        #     return False
+        try:
+            (most_common_chow, ) = Counter(
+                [cst[1] for cst in chow_start_tiles]).most_common(1)
+        except ValueError:
+            # No chow, so none is most_common.
+            return False
         return 'b' + most_common_chow[0] in chow_start_tiles \
             and 'c' + most_common_chow[0] in chow_start_tiles \
             and 's' + most_common_chow[0] in chow_start_tiles
@@ -681,13 +694,45 @@ class TripleChowBonus(Function):
             and TripleChow.appliesToHand(hand)
 
 
+class PureStraight(Function):
+    u"""
+    Pure straight
+
+    A pure straight, that is, a hand with three consecutive chows in
+    the same suit.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        # The code is basically the same as for triple chow, only we
+        # first check the most common suite, and then check that we
+        # have the right numbers in that suite.
+        chow_start_tiles = [meld.pairs[0].lower() for meld in hand.melds
+                            if meld.isChow()]
+        try:
+            (most_common_chow, ) = Counter(
+                [cst[0] for cst in chow_start_tiles]).most_common(1)
+        except ValueError:
+            # No chow, so none is most_common.
+            return False
+        return most_common_chow[0] + '1' in chow_start_tiles \
+            and most_common_chow[0] + '4' in chow_start_tiles \
+            and most_common_chow[0] + '7' in chow_start_tiles
+
+
+class PureStraightBonus(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        return MostlyConcealed.appliesToHand(hand) \
+            and PureStraight.appliesToHand(hand)
+
+
 class SevenPairs(Function):
     u"""
     The mahjong hand seven pairs.
 
     Class to define the winnig hand seven pairs. Differences to
-    AllPairHonors: 2–8 tiles are allowed, and kongs (seen as two
-    pairs) are not.
+    AllPairHonors: 2–8 tiles are allowed, kongs (seen as two
+    pairs) are not and it also must be concealed*.
     """
 
     @staticmethod
@@ -708,6 +753,8 @@ class SevenPairs(Function):
         return len(hand.declaredMelds) < 2
 
     def appliesToHand(self, hand):
+        if not MostlyConcealed.appliesToHand(hand):
+            return False
         if not self.maybeCallingOrWon(hand):
             return False
         melds = hand.melds
@@ -732,12 +779,10 @@ class SevenPairs(Function):
         if hand.declaredMelds:
             return False
         melds = hand.melds
-        tiles = list(x.lower() for x in hand.tileNames)
         pair_count = 0
         for meld in melds:
             if meld.isPair():
                 pair_count += 1
-        pairWanted = 7 - maxMissing / 2  # count pairs
         result = (pair_count >= (7 - maxMissing / 2))
         if pair_count > 5:
             hand.debug(
@@ -1292,13 +1337,34 @@ class ThreeConcealedPungsOrKongs(Function):
 
     A hand with three concealend pungs or kongs. The difference to
     ThreeConcealedPongs is that for this claimed kongs (i.e. kongs
-    that started out as hidden pungs do not count.)
+    that started out as hidden pungs do not count.) Also, we have an
+    extra yakuman hand for four concealed pungs or kongs.
     """
     @staticmethod
     def appliesToHand(hand):
         return len(
             [x for x in hand.melds
-             if x.state == CONCEALED and x.isPungOrKong()]) >= 3
+             if x.state == CONCEALED and x.isPungOrKong()]) == 3
+
+
+class FourConcealedPungsOrKongs(Function):
+    u"""
+    Four concealend pungs or kongs.
+
+    A hand with four concealend pungs or kongs. The difference to
+    ThreeConcealedPongs is that for this claimed kongs (i.e. kongs
+    that started out as hidden pungs do not count.) And of course that
+    it have to be four.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        # “Winning on a discard is allowed only in case of single wait
+        # on the pair.” is a tautology. Even if the hand is
+        # concealed*, winnig on the discard would make the fourth pung
+        # open, even if not the hand.
+        return len(
+            [x for x in hand.melds
+             if x.state == CONCEALED and x.isPungOrKong()]) == 4
 
 
 class MahJonggWithOriginalCall(Function):
