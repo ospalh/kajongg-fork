@@ -347,7 +347,7 @@ class JapaneseStyleRuleset(PredefinedRuleset):
             self, name or m18nE(u'Japanese style rules (EMA)'))
         self.basicStyle = Ruleset.Japanese
 
-    def initRuleset(self):
+    def _initRuleset(self):
         """Sets the description"""
         self.description = m18n(
             u'Japanese style rules, according to the EMA (work in progress)')
@@ -686,10 +686,20 @@ Hand with three pungs/kongs of winds and a pair of. Double yakuman. \
         sense to change them. Some values make no sense at all here,
         so they are just hard-coded in to some value.
         """
-        # The hard-coded parameters
-        self.limit = 500  # There are no limit hands in the Chinese sense
-        self.roofOff = True  # So we don’t worry about roofs
-        self.kongBoxSize = 14
+        # Note the min *and* max for yakuman and kong box size.
+        self.parameterRules.add(Rule(
+                'Points for yakuman',
+                'intlimit||Omandatory||Omin=8000||Omax=8000', parameter=8000,
+                description=m18n('Yakuman base score is 8000')))
+        self.parameterRules.add(Rule(
+                'Play with the roof off', 'boolroofOff||Omandatory',
+                parameter=False,
+                description=m18n('This parameter is ignored.')))
+        self.parameterRules.add(Rule(
+                'Size of the dead wall',
+                'intkongBoxSize||Omandatory||Omin=14||Omax=14',
+                parameter=14,
+                description=m18n('The dead wall contains 14 tiles')))
         # Each of the 14 stones in the dead wall may be used. It MUST
         # NOT be <14. Setting it to >14 could work, but doing a range
         # check here is too much hassle. Oh. and it is a dead wall,
@@ -752,7 +762,7 @@ class JapaneseJapaneseStyleRuleset(JapaneseStyleRuleset):
         JapaneseStyleRuleset.__init__(
             self, name or m18nE(u'Japanese style rules (Japanese)'))
 
-    def initRuleset(self):
+    def _initRuleset(self):
         """Sets the description"""
         self.description = m18n(
             u'Japanese style rules, Japanese variant (work in progress)')
