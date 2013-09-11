@@ -343,12 +343,13 @@ class JapaneseStyleRuleset(PredefinedRuleset):
     def __init__(self, name=None):
         u"""Initialize the rules."""
         PredefinedRuleset.__init__(
-            self, name or m18nE(u'Japanese style rules'))
+            self, name or m18nE(u'Japanese style rules (EMA)'))
         self.basicStyle = Ruleset.Japanese
 
     def initRuleset(self):
         """Sets the description"""
-        self.description = m18n(u'Japanese style rules (work in progress)')
+        self.description = m18n(
+            u'Japanese style rules, according to the EMA (work in progress)')
 
     def addManualRules(self):
         u"""
@@ -470,11 +471,6 @@ any one extra tile in the same suit. (Chuuren pooto)''')))
             Rule('All simples', 'FAllSimples', doubles=1,
                  description=m18n(u'''\
 Concealed hand with no terminals and honours. (Tanyao chuu)''')))
-        # self.winnerRules.add(
-        #     Rule('All simples', 'FAllSimples||Omay_be_open', doubles=1,
-        #         description=m18n(u'''\
-# Hand with no terminals and honours. (Tanyao chuu)''')))
-
         # self.winnerRules.add(
         #     Rule('Pinfu', 'FPinfu||Ono_other_points', doubles=1
         #          description=m18n(
@@ -731,6 +727,44 @@ Hand with three pungs/kongs of winds and a pair of. Double yakuman. \
         #        description=m18n(u'''\
 # Different Japanese rule codes do or do not require that the “All simples” \
 # hand be concealed.''')))
+
+
+class JapaneseJapaneseStyleRuleset(JapaneseStyleRuleset):
+    """
+    Ruleset for Japanese style mahjong.
+
+    This is a variant of the EMA Japanese rules, as the game is played
+    in Japan, according to the EMA rules preface.
+
+    The EMA rules mentions two differences:
+    1. All simples may be open. This is the change that is implemented.
+    2. There is no two-yaku requirement when there are five or more
+       (repeat) counters. The whole counter rule is something TODO.
+    3. When calling a chow/chi, in Japan it is forbidden to discard
+       the called tyle again. TODO. (Not sure about the point of
+       this. Calling that chi in the first place would be an
+       oversight, i guess.)
+    """
+
+    def __init__(self, name=None):
+        u"""Initialize the rules."""
+        JapaneseStyleRuleset.__init__(
+            self, name or m18nE(u'Japanese style rules (Japanese)'))
+
+    def initRuleset(self):
+        """Sets the description"""
+        self.description = m18n(
+            u'Japanese style rules, Japanese variant (work in progress)')
+
+    def loadRules(self):
+        JapaneseStyleRuleset.loadRules(self)
+        # One difference: in Japan, all simples may be open.
+        del self.winnerRules['All simples']
+        self.winnerRules.add(Rule(
+                'All simples', 'FAllSimples||Omay_be_open', doubles=1,
+                description=m18n(u'''\
+Hand with no terminals and honours. (Tanyao chuu)''')))
+
 
 
 def loadPredefinedRulesets():
