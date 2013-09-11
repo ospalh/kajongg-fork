@@ -593,10 +593,10 @@ Bonus yaku for a full flush hand being concealed. (Chinitsu)''')))
         # as they have to be checked by hand for manual scoring.
 
         # The extra “rule” “Winning on a discard is allowed only in
-        # case of single wait on the pair.” for “Four concealed pungs”
-        # is actually a tautology. When you call any of the four
-        # pungs, even as the last tile, that last pung is not
-        # concealed, even if the whole hand is concealed*.
+        # case of single wait on the pair.”  is actually a
+        # tautology. When you call any of the four pungs, even as the
+        # last tile, that last pung is not concealed, even if the
+        # whole hand is concealed*.
         self.winnerRules.add(Rule(
                 'Four concealed pungs', 'FFourConcealedPungsOrKongs',
                 doubles=13, description=m18n(
@@ -649,27 +649,27 @@ Hand with three pungs/kongs of winds and a pair of. Double yakuman. \
                     u'Pung/kong of the seat wind (Fanpai)')))
         # And the non-yaku melds
         self.meldRules.add(
-            Rule(u'Open kong, 2–8', 'FExposedMinorKong', points=8))
+            Rule('Open kong, 2..8', 'FExposedMinorKong', points=8))
         self.meldRules.add(
             Rule('Open kong, terminals', 'FExposedTerminalsKong', points=16))
         self.meldRules.add(
             Rule('Open kong, honours', 'FExposedHonorsKong', points=16))
         self.meldRules.add(
-            Rule(u'Open pung, 2–8', 'FExposedMinorPung', points=2))
+            Rule('Open pung, 2..8', 'FExposedMinorPung', points=2))
         self.meldRules.add(
             Rule('Open pung, terminals', 'FExposedTerminalsPung', points=4))
         self.meldRules.add(
             Rule('Open pung, honours', 'FExposedHonorsPung', points=4))
         # Concealed melds:
         self.meldRules.add(
-            Rule(u'Concealed kong, 2–8', 'FConcealedMinorKong', points=16))
+            Rule('Concealed kong, 2..8', 'FConcealedMinorKong', points=16))
         self.meldRules.add(Rule(
                 'Concealed kong, terminals', 'FConcealedTerminalsKong',
                 points=32))
         self.meldRules.add(
             Rule('Concealed kong, honours', 'FConcealedHonorsKong', points=32))
         self.meldRules.add(
-            Rule(u'Concealed pung, 2–8', 'FConcealedMinorPung', points=4))
+            Rule('Concealed pung, 2..8', 'FConcealedMinorPung', points=4))
         self.meldRules.add(Rule(
                 'Concealed pung, terminals', 'FConcealedTerminalsPung',
                 points=8))
