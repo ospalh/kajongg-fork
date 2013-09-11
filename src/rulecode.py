@@ -931,6 +931,11 @@ class StandardRotation(Function):
     def rotate(game):
         return game.winner and game.winner.wind != 'E'
 
+class JapaneseRotation(Function):
+    @staticmethod
+    def rotate(game):
+        return game.winner and game.winner.wind != 'E'
+
 class EastWonNineTimesInARow(Function):
     nineTimes = 9
     @staticmethod

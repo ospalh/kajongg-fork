@@ -457,6 +457,10 @@ plus one extra terminal or honour tile. (Kokushi musou)''')))
 Concealed hand consisting of the tiles 1112345678999 in the same suit plus \
 any one extra tile in the same suit. (Chuuren pooto)''')))
 
+        self.mjRules.add(Rule(
+                'Riichi rotaion rules',
+                'FJapaneseRotation||Orotate||Ointernal'))
+
         # The list of yaku, from 1 to 13.
         # One yaku (Some are two yaku when concealed.)
         # self.winnerRules.add(
