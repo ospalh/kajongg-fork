@@ -27,6 +27,7 @@ from query import Transaction, Query
 from tile import Tile
 from meld import Meld, CONCEALED, PUNG, hasChows, meldsContent
 from hand import Hand
+from rule import Ruleset
 
 class Players(list):
     """a list of players where the player can also be indexed by wind.
