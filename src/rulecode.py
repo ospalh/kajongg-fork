@@ -179,7 +179,7 @@ class AllPungs(Function):
 
     The all pungs yaku is different from no chow above. No chow
     applies to seven pairs (correctly or not), this does not.
-    """""
+    """
     @staticmethod
     def appliesToHand(hand):
         pung_kong_count = 0
