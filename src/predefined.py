@@ -415,7 +415,12 @@ Mahjong on the discard after the last tile in the wall. (Houtei)''')))
         # pung” here.
 
     def addHandRules(self):
-        """Define rules for the hand. They are not used for Japaneses style."""
+        """
+        Rules for the hand.
+
+        There are no rules for non-winning hand when scoring Japanese
+        style.
+        """
         pass
 
     def loadRules(self):
