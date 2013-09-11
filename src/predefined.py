@@ -385,21 +385,21 @@ Mahjong on the discard after the last tile in the wall. (Houtei)''')))
         #         description=m18n('''\
         # NB. THe original call code can be used as inspiration for
         # riichi code''')))
-        # Yakuman (Japanese style limit) hands. The scoring is done
-        # with a table, so the 13 is kind of meaningless.
+        # Yakuman (limit) hands. The scoring is done
+        # with a table.
         self.winnerRules.add(Rule(
                 'Blessing of Heaven', 'FBlessingOfHeaven||Olastsource=1',
-                doubles=13, description=m18n(
+                limits=1, description=m18n(
                     'East mahjong on initial fourteen tiles (Tenho)')))
         self.winnerRules.add(Rule(
                 'Blessing of Earth', 'FBlessingOfEarth||Olastsource=1',
-                doubles=13, description=m18n(
+                limits=1, description=m18n(
                     'Mahjong on selfdraw in the first round (Chiho)')))
         # Japanese Blessing of Earth may need to get its own rule, to
         # make sure nobody has called anything.
         # self.winnerRules.add(
         #     Rule('Blessing of Man', 'FBlessingOfMan||Olastsource=1',
-        #          doubles=13,
+        #          limits=1,
         #          description=m18n(
         #             'Mahjong on discard in the first round (Renho)')))
 
@@ -448,11 +448,11 @@ Mahjong on the discard after the last tile in the wall. (Houtei)''')))
         # as extra han are counted (afais).
         self.mjRules.add(Rule(
                 'Thirteen Orphans', 'FThirteenOrphans||Omayrobhiddenkong',
-                doubles=13, description=m18n('''\
+                limits=1, description=m18n('''\
 Concealed hand with one of each of the 13 different terminal and honour tiles \
 plus one extra terminal or honour tile. (Kokushi musou)''')))
         self.mjRules.add(Rule(
-                'Nine Gates', 'FGatesOfHeaven||OlastExtra', doubles=13,
+                'Nine Gates', 'FGatesOfHeaven||OlastExtra', limits=1,
                 description=m18n('''\
 Concealed hand consisting of the tiles 1112345678999 in the same suit plus \
 any one extra tile in the same suit. (Chuuren pooto)''')))
@@ -596,31 +596,31 @@ Bonus yaku for a full flush hand being concealed. (Chinitsu)''')))
         # whole hand is concealed*.
         self.winnerRules.add(Rule(
                 'Four concealed pungs', 'FFourConcealedPungsOrKongs',
-                doubles=13, description=m18n(
+                limits=1, description=m18n(
                     'Concealend hand with four pungs/kongs (Suu ankou)')))
         self.winnerRules.add(Rule(
-                'Four kongs', 'FFourfoldPlenty', doubles=13,
+                'Four kongs', 'FFourfoldPlenty', limits=1,
                 description=m18n('Hand with four kongs (Suu kan tsu)')))
         self.winnerRules.add(Rule(
-                'All green', 'FAllGreen',  doubles=13, description=m18n(
+                'All green', 'FAllGreen',  limits=1, description=m18n(
                     u''' Hand composed entirely of green tiles. Green tiles \
 are: green dragons 2, 3, 4, 6 and 8 of bamboo (Ryuu iisou)''')))
         self.winnerRules.add(Rule(
-                'All terminals', 'FAllTerminals', doubles=13, description=m18n(
+                'All terminals', 'FAllTerminals', limits=1, description=m18n(
                     'Hand composed entirely of terminal tiles. (Chinrouto)')))
         self.winnerRules.add(Rule(
-                'All Honours', 'FOnlyHonors', doubles=13, description=m18n(
+                'All Honours', 'FOnlyHonors', limits=1, description=m18n(
                     'Hand composed entirely of honour tiles. (Tsuu iisou)')))
         self.winnerRules.add(Rule(
-                'Big three dragons', 'FBigThreeDragons', doubles=13,
+                'Big three dragons', 'FBigThreeDragons', limits=1,
                 description=m18n(
                     ' Hand with three pungs/kongs of dragons. (Dai sangen)')))
         self.winnerRules.add(Rule(
-                'Little four winds', 'FLittleFourJoys', doubles=13,
+                'Little four winds', 'FLittleFourJoys', limits=1,
                 description=m18n(u'''\
 Hand with three pungs/kongs of winds and a pair of . (Shou suushi)''')))
         self.winnerRules.add(Rule(
-                'Big four winds', 'FBigFourJoys', doubles=26,
+                'Big four winds', 'FBigFourJoys', limits=2,
                 description=m18n(u'''\
 Hand with three pungs/kongs of winds and a pair of. Double yakuman. \
 (Dai suushi)''')))
@@ -724,7 +724,8 @@ Hand with three pungs/kongs of winds and a pair of. Double yakuman. \
                 parameter=2, description=m18n(
                     'Only east and south wind rounds are played.')))
         self.parameterRules.add(Rule(
-                'Number of allowed chows', 'intmaxChows||Omandatory',
+                'Number of allowed chows',
+                'intmaxChows||Omandatory||Omin=4||Omax=4',
                  parameter=4, description=m18n(
                     u'Different yaku demand between two and four chows.')))
         self.parameterRules.add(Rule(
@@ -732,6 +733,10 @@ Hand with three pungs/kongs of winds and a pair of. Double yakuman. \
                 'boolmustDeclareCallingHand||Omandatory', parameter=False,
                 description=m18n(
                     'Only riichi must be declared.')))
+        self.parameterRules.add(Rule(
+                'Double yakuman', 'booldouble_yakuman',  parameter=False,
+                description=m18n(u'''\
+Allow double yakuman. (Big four winds always counts as double yakuman)''')))
         # self.parameterRules.add(Rule(
         #         u'“All simples” may be open.',
         #        'boolall_simples_may_be_open||Omandatory', parameter=False,
