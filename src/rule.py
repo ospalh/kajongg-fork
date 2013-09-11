@@ -584,7 +584,7 @@ into a situation where you have to pay a penalty"""))
             if copy:
                 self.rulesetId, self.name = self._newKey(minus)
             Query('INSERT INTO ruleset(id,name,hash,description) VALUES(?,?,?,?)',
-                list([self.rulesetId, english(self.name), self.hash, self.description]))
+                list([self.rulesetId, english(self.name).decode('utf-8'), self.hash, self.description]))
         # do not put this into the transaction, keep it as short as possible. sqlite3/Qt
         # has problems if two processes are trying to do the same here (kajonggtest)
         for rule in self.allRules:
