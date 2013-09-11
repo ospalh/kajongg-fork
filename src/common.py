@@ -20,6 +20,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 from collections import defaultdict
 
+import sip
+
 # common must not import util
 
 Preferences = None # pylint: disable=C0103
@@ -29,11 +31,27 @@ Preferences = None # pylint: disable=C0103
 WINDS = 'ESWN'
 LIGHTSOURCES = ['NE', 'NW', 'SW', 'SE']
 
+def isAlive(qobj):
+    """is the underlying C++ object still valid?
+    This function is taken from the book
+    "Rapid GUI Programming with Python and Qt"
+    by Mark Summerfield."""
+    if qobj is None:
+        return False
+    try:
+        sip.unwrapinstance(qobj)
+    except RuntimeError:
+        return False
+    else:
+        return True
+
 class Debug:
     """holds flags for debugging output. At a later time we might
     want to add command line parameters for initialisation, and
     look at kdebugdialog"""
+    connections = False
     traffic = False
+    process = False
     sql = False
     animation = '' # 'yeysywynfefsfwfn'
     animationSpeed = False
@@ -52,6 +70,8 @@ class Debug:
     explain = False
     random = False
     deferredBlock = False
+    stack = False
+    events = ''
 
     def __init__(self):
         raise Exception('Debug is not meant to be instantiated')
@@ -66,10 +86,10 @@ class Debug:
                 if idx < len(options) - 1 and idx % 5 == 4:
                     yield 'SEPARATOR'
         options = list(x for x in Debug.__dict__ if not x.startswith('_'))
-        boolOptions = list(x for x in options if isinstance(Debug.__dict__[x], bool))
-        stringOptions = list(x for x in options if isinstance(Debug.__dict__[x], basestring))
+        boolOptions = sorted(x for x in options if isinstance(Debug.__dict__[x], bool))
+        stringOptions = sorted(x for x in options if isinstance(Debug.__dict__[x], basestring))
         stringExample = '%s=%s' % (stringOptions[0], 's3s4')
-        allOptions = boolOptions + stringOptions
+        allOptions = sorted(boolOptions + stringOptions)
         opt = '\n'.join(', '.join(optYielder(allOptions)).split(' SEPARATOR, '))
         return """set debug options. Pass a comma separated list of options.
 Options are: {opt}.
@@ -102,17 +122,18 @@ class InternalParameters:
     scaleScene = True
     reactor = None
     game = None # will only be set by command line --game
-    autoPlay = False
+    demo = False
     showRulesets = False
-    autoPlayRulesetName = None	# will only be set by command line --autoplay
-    autoPlayRuleset = None	# will only be set by command line --autoplay
+    rulesetName = None	# will only be set by command line --ruleset
+    ruleset = None # from rulesetName
+    player = None
     dbPath = None
     dbIdent = None
     app = None
     socket = None
     playOpen = False
     field = None
-    hasGUI = False
+    gui = False
     isServer = False
     AI = 'Default'
     csv = None

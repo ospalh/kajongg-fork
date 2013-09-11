@@ -19,7 +19,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
 import socket, subprocess, time, datetime, os, sys
-import csv, re
+import csv, re, resource
 
 from twisted.spread import pb
 from twisted.cred import credentials
@@ -30,15 +30,15 @@ from PyQt4.QtGui import QDialog, QDialogButtonBox, QVBoxLayout, QGridLayout, \
     QLabel, QComboBox, QLineEdit, QPushButton, QFormLayout, \
     QProgressBar, QRadioButton, QSpacerItem, QSizePolicy
 
-from kde import Sorry, NonModalInformation, QuestionYesNo, KDialogButtonBox, KUser, KIcon, \
+from kde import Sorry, Information, QuestionYesNo, KDialogButtonBox, KUser, KIcon, \
     DialogIgnoringEscape
 
 from util import m18n, m18nc, logWarning, logException, socketName, english, \
     appdataDir, logInfo, logDebug, removeIfExists, which
-from util import SERVERMARK, isAlive
+from util import SERVERMARK
 from message import Message, ChatMessage
 from chat import ChatWindow
-from common import InternalParameters, Preferences, Debug
+from common import InternalParameters, Preferences, Debug, isAlive
 from game import Players
 from query import Transaction, Query
 from board import Board
@@ -78,7 +78,7 @@ class LoginDialog(QDialog):
             servers.append(localName)
         if 'kajongg.org' not in servers:
             servers.append('kajongg.org')
-        if InternalParameters.autoPlay:
+        if InternalParameters.demo:
             servers.remove(localName)    # we want a unique list, it will be re-used for all following games
             servers.insert(0, localName)   # in this process but they will not be autoPlay
         self.cbServer.addItems(servers)
@@ -131,24 +131,34 @@ class LoginDialog(QDialog):
         """the user selected a different server"""
         records = Query('select player.name from player, passwords '
                 'where passwords.url=? and passwords.player = player.id', list([self.url])).records
+        players = list(x[0] for x in records)
+        preferPlayer = InternalParameters.player
+        if preferPlayer:
+            if preferPlayer in players:
+                players.remove(preferPlayer)
+            players.insert(0, preferPlayer)
         self.cbUser.clear()
-        self.cbUser.addItems(list(x[0] for x in records))
+        self.cbUser.addItems(players)
         if not self.cbUser.count():
             user = KUser() if os.name == 'nt' else KUser(os.geteuid())
             self.cbUser.addItem(user.fullName() or user.loginName())
-        userNames = [x[1] for x in self.servers if x[0] == self.url]
-        if userNames:
-            userIdx = self.cbUser.findText(userNames[0])
-            if userIdx >= 0:
-                self.cbUser.setCurrentIndex(userIdx)
+        if not preferPlayer:
+            userNames = [x[1] for x in self.servers if x[0] == self.url]
+            if userNames:
+                userIdx = self.cbUser.findText(userNames[0])
+                if userIdx >= 0:
+                    self.cbUser.setCurrentIndex(userIdx)
         showPW = self.url != Query.localServerName
         self.grid.labelForField(self.edPassword).setVisible(showPW)
         self.edPassword.setVisible(showPW)
-        self.grid.labelForField(self.cbRuleset).setVisible(not showPW)
-        self.cbRuleset.setVisible(not showPW)
+        self.grid.labelForField(self.cbRuleset).setVisible(not showPW and not InternalParameters.ruleset)
+        self.cbRuleset.setVisible(not showPW and not InternalParameters.ruleset)
         if not showPW:
             self.cbRuleset.clear()
-            self.cbRuleset.items = Ruleset.selectableRulesets(self.url)
+            if InternalParameters.ruleset:
+                self.cbRuleset.items = [InternalParameters.ruleset]
+            else:
+                self.cbRuleset.items = Ruleset.selectableRulesets(self.url)
 
     def userChanged(self, text):
         """the username has been changed, lookup password"""
@@ -296,7 +306,7 @@ class SelectChow(DialogIgnoringEscape):
         if button.isChecked():
             self.selectedChow = self.chows[self.buttons.index(button)]
             self.accept()
-            self.deferred.callback((Message.Chow.name, self.selectedChow))
+            self.deferred.callback((Message.Chow, self.selectedChow))
 
     def closeEvent(self, event):
         """allow close only if a chow has been selected"""
@@ -328,7 +338,7 @@ class SelectKong(DialogIgnoringEscape):
         if button.isChecked():
             self.selectedKong = self.kongs[self.buttons.index(button)]
             self.accept()
-            self.deferred.callback((Message.Kong.name, self.selectedKong))
+            self.deferred.callback((Message.Kong, self.selectedKong))
 
     def closeEvent(self, event):
         """allow close only if a chow has been selected"""
@@ -595,7 +605,7 @@ class HumanClient(Client):
         self.connector = None
         self.table = None
         self.loginDialog = LoginDialog()
-        if InternalParameters.autoPlay:
+        if InternalParameters.demo:
             self.loginDialog.accept()
         else:
             if not self.loginDialog.exec_():
@@ -613,7 +623,7 @@ class HumanClient(Client):
     def __checkExistingConnections(self):
         """do we already have a connection to the wanted URL?"""
         for client in self.clients:
-            if client.perspective and client.url == self.__url:
+            if client.connectedWithServer and client.url == self.__url:
                 client.callServer('sendTables').addCallback(client.tableList.gotTables)
                 client.tableList.activateWindow()
                 raise AlreadyConnected(self.__url)
@@ -624,7 +634,7 @@ class HumanClient(Client):
 
     def ping(self):
         """regularly check if server is still there"""
-        if self.perspective:
+        if self.connectedWithServer:
             self.callServer('ping').addCallback(self.pingLater).addErrback(self.remote_serverDisconnects)
 
     @staticmethod
@@ -637,9 +647,9 @@ class HumanClient(Client):
 
     def __defineRuleset(self):
         """find out what ruleset to use"""
-        if InternalParameters.autoPlayRuleset:
-            return InternalParameters.autoPlayRuleset
-        elif InternalParameters.autoPlay:
+        if InternalParameters.ruleset:
+            return InternalParameters.ruleset
+        elif InternalParameters.demo:
             return Ruleset.selectableRulesets()[0]
         else:
             return self.loginDialog.cbRuleset.current
@@ -750,8 +760,9 @@ class HumanClient(Client):
             if InternalParameters.socket:
                 args.append('--socket=%s' % InternalParameters.socket)
             process = subprocess.Popen(args, shell=os.name=='nt')
-            logInfo(m18n('started the local kajongg server: pid=<numid>%1</numid> %2',
-                process.pid, ' '.join(args)))
+            if Debug.connections:
+                logDebug(m18n('started the local kajongg server: pid=<numid>%1</numid> %2',
+                    process.pid, ' '.join(args)))
         except OSError, exc:
             logException(exc)
 
@@ -760,24 +771,23 @@ class HumanClient(Client):
         if self.tableList:
             self.tableList.loadTables(self.tables)
 
-    def remote_tablesChanged(self, tables):
+    def remote_tableRemoved(self, tableid, message, *args):
         """update table list"""
-        Client.remote_tablesChanged(self, tables)
+        Client.remote_tableRemoved(self, tableid, message, *args)
         self.__updateTableList()
-
-    def remote_tableClosed(self, tableid, msg):
-        """update table list"""
-        Client.remote_tableClosed(self, tableid, msg)
-        self.__updateTableList()
+        if message:
+            # do not tell me that I just logged out
+            if not self.username in args or not message.endswith('has logged out'):
+                logWarning(m18n(message, *args))
 
     def remote_newTables(self, tables):
         """update table list"""
         Client.remote_newTables(self, tables)
         self.__updateTableList()
 
-    def remote_replaceTable(self, table):
+    def remote_tableChanged(self, table):
         """update table list"""
-        newClientTable = ClientTable.fromList(self, table)
+        newClientTable = ClientTable(self, *table) # pylint: disable=W0142
         oldTable = self.tableById(newClientTable.tableid)
         if oldTable:
             # this happens if a game has more than one human player and
@@ -788,9 +798,10 @@ class HumanClient(Client):
                 for name in newClientTable.playerNames:
                     if name != self.username:
                         if oldTable.isOnline(name) and not newClientTable.isOnline(name):
-                            Sorry(m18n('Player %1 has left the table', name), self.logout)
-        Client.remote_replaceTable(self, table)
-        self.__updateTableList()
+                            Sorry(m18n('Player %1 has left the table', name)).addCallback(self.logout)
+            self.tables.remove(oldTable)
+            self.tables.append(newClientTable)
+            self.__updateTableList()
 
     def remote_chat(self, data):
         """others chat to me"""
@@ -817,7 +828,7 @@ class HumanClient(Client):
         """playerNames are in wind order ESWN"""
         def answered(result):
             """callback, called after the client player said yes or no"""
-            if self.perspective and result:
+            if self.connectedWithServer and result:
                 # still connected and yes, we are
                 return Client.readyForGameStart(self, tableid, gameid, wantedGame, playerNames, shouldSave)
             else:
@@ -827,26 +838,22 @@ class HumanClient(Client):
             return Client.readyForGameStart(self, tableid, gameid, wantedGame, playerNames, shouldSave)
         msg = m18n("The game can begin. Are you ready to play now?\n" \
             "If you answer with NO, you will be removed from table %1.", tableid)
-        return QuestionYesNo(msg, answered)
+        return QuestionYesNo(msg, caption=self.username).addCallback(answered)
 
     def readyForHandStart(self, playerNames, rotateWinds):
         """playerNames are in wind order ESWN. Never called for first hand."""
         def answered(dummy=None):
             """called after the client player said yes, I am ready"""
-            if self.perspective:
-                # still connected?
+            if self.connectedWithServer:
                 return Client.readyForHandStart(self, playerNames, rotateWinds)
-        if not self.perspective:
+        if not self.connectedWithServer:
             # disconnected meanwhile
             return
         if InternalParameters.field:
             # update the balances in the status bar:
             InternalParameters.field.updateGUI()
         assert not self.game.isFirstHand()
-        if self.game.autoPlay:
-            return answered()
-        else:
-            return NonModalInformation(m18n("Ready for next hand?"), answered)
+        return Information(m18n("Ready for next hand?"), modal=False).addCallback(answered)
 
     def ask(self, move, answers):
         """server sends move. We ask the user. answers is a list with possible answers,
@@ -881,9 +888,9 @@ class HumanClient(Client):
         which contains Message.Chow plus selected Chow, we should
         return the same tuple here"""
         if self.game.autoPlay:
-            return Message.Chow.name, self.intelligence.selectChow(chows)
+            return Message.Chow, self.intelligence.selectChow(chows)
         if len(chows) == 1:
-            return Message.Chow.name, chows[0]
+            return Message.Chow, chows[0]
         if Preferences.propose:
             propose = self.intelligence.selectChow(chows)
         else:
@@ -896,9 +903,9 @@ class HumanClient(Client):
     def selectKong(self, kongs):
         """which possible kong do we want to declare?"""
         if self.game.autoPlay:
-            return Message.Kong.name, self.intelligence.selectKong(kongs)
+            return Message.Kong, self.intelligence.selectKong(kongs)
         if len(kongs) == 1:
-            return Message.Kong.name, kongs[0]
+            return Message.Kong, kongs[0]
         deferred = Deferred()
         selDlg = SelectKong(kongs, deferred)
         assert selDlg.exec_()
@@ -911,7 +918,7 @@ class HumanClient(Client):
             # do not remove tile from hand here, the server will tell all players
             # including us that it has been discarded. Only then we will remove it.
             myself.handBoard.setEnabled(False)
-            return answer.name, myself.handBoard.focusTile.element
+            return answer, myself.handBoard.focusTile.element
         args = self.sayable[answer]
         if answer == Message.Chow:
             return self.selectChow(args)
@@ -919,7 +926,7 @@ class HumanClient(Client):
             return self.selectKong(args)
         assert args
         self.game.hidePopups()
-        return answer.name, args
+        return answer, args
 
     def answerError(self, answer, move, answers):
         """an error happened while determining the answer to server"""
@@ -929,7 +936,8 @@ class HumanClient(Client):
         """the server aborted this game"""
         if self.table and self.table.tableid == tableid:
             # translate Robot to Roboter:
-            args = self.game.players.translatePlayerNames(args)
+            if self.game:
+                args = self.game.players.translatePlayerNames(args)
             logWarning(m18n(message, *args))
             if self.game:
                 self.game.close()
@@ -946,6 +954,8 @@ class HumanClient(Client):
                 if InternalParameters.csv:
                     gameWinner = max(self.game.players, key=lambda x: x.balance)
                     writer = csv.writer(open(InternalParameters.csv,'a'), delimiter=';')
+                    if Debug.process:
+                        self.game.csvTags.append('MEM:%s' % resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
                     row = [InternalParameters.AI, str(self.game.seed), ','.join(self.game.csvTags)]
                     for player in sorted(self.game.players, key=lambda x: x.name):
                         row.append(player.name.encode('utf-8'))
@@ -959,19 +969,16 @@ class HumanClient(Client):
                 else:
                     self.game.close().addCallback(Client.quitProgram)
         assert self.table and self.table.tableid == tableid
-        if self.table and self.table.tableid == tableid:
-            if InternalParameters.field:
-                # update the balances in the status bar:
-                InternalParameters.field.updateGUI()
-            if self.game.autoPlay:
-                yes(None)
-            else:
-                logInfo(m18n(message, *args), showDialog=True).addCallback(yes)
+        if InternalParameters.field:
+            # update the balances in the status bar:
+            InternalParameters.field.updateGUI()
+        logInfo(m18n(message, *args), showDialog=True).addCallback(yes)
 
     def remote_serverDisconnects(self, dummyResult=None):
         """we logged out or or lost connection to the server.
         Remove visual traces depending on that connection."""
-        self.perspective = None
+        game = self.game
+        self.game = None # avoid races: messages might still arrive
         if self.tableList:
             model = self.tableList.view.model()
             if model:
@@ -984,7 +991,7 @@ class HumanClient(Client):
         if self in self.clients:
             self.clients.remove(self)
         field = InternalParameters.field
-        if field and field.game == self.game:
+        if field and field.game == game:
             field.hideGame()
 
     def loginCommand(self, username):
@@ -1061,7 +1068,7 @@ class HumanClient(Client):
             else:
                 msg = m18nc('USER is not known on SERVER',
                     '%1 is not known on %2, do you want to open an account?', name, host)
-                return QuestionYesNo(msg, answered)
+                return QuestionYesNo(msg).addCallback(answered)
         else:
             self._loginReallyFailed(failure)
 
@@ -1087,9 +1094,17 @@ class HumanClient(Client):
         self.root = self.loginCommand(self.username)
         self.root.addCallback(self.loggedIn).addErrback(self._loginFailed)
 
+    def __perspectiveDisconnected(self, remoteReference):
+        """perspective calls us back"""
+        if Debug.traffic:
+            logDebug('perspective notifies disconnect: %s' % remoteReference)
+        self.connectedWithServer = False
+
     def loggedIn(self, perspective):
         """callback after the server answered our login request"""
+        perspective.notifyOnDisconnect(self.__perspectiveDisconnected)
         self.perspective = perspective
+        self.connectedWithServer = True
         self.tableList = TableList(self)
         self.updateServerInfoInDatabase()
         voiceId = None
@@ -1174,13 +1189,13 @@ class HumanClient(Client):
     def logout(self, dummyResult=None):
         """clean visual traces and logout from server"""
         result = None
-        if self.perspective:
+        if self.connectedWithServer:
             result = self.callServer('logout')
         return result or succeed(None)
 
     def callServer(self, *args):
         """if we are online, call server"""
-        if self.perspective:
+        if self.connectedWithServer:
             if args[0] is None:
                 args = args[1:]
             try:

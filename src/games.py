@@ -30,7 +30,7 @@ from PyQt4.QtSql import QSqlQueryModel
 from util import logException, m18n, m18nc
 from guiutil import MJTableView
 from statesaver import StateSaver
-from query import Query
+from query import Query, DBHandle
 from common import Debug
 from modeltest import ModelTest
 
@@ -142,7 +142,7 @@ class Games(QDialog):
             "%s" \
             "and exists(select 1 from score where game=g.id)" % \
             ("and g.endtime is null " if self.onlyPending else "")
-        self.model.setQuery(query, Query.dbhandle)
+        self.model.setQuery(query, DBHandle.default)
         self.model.setHeaderData(1, Qt.Horizontal,
             QVariant(m18n("Started")))
         self.model.setHeaderData(2, Qt.Horizontal,
@@ -179,17 +179,20 @@ class Games(QDialog):
 
     def delete(self):
         """delete a game"""
-        selnum = len(self.selection.selectedRows())
-        if selnum == 0:
+        def answered(result, games):
+            """question answered, result is True or False"""
+            if result:
+                cmdList = []
+                for game in games:
+                    cmdList.append("DELETE FROM score WHERE game = %d" % game)
+                    cmdList.append("DELETE FROM game WHERE id = %d" % game)
+                Query(cmdList)
+                self.setQuery() # just reload entire table
+        deleteGames = list(x.data().toInt()[0] for x in self.view.selectionModel().selectedRows(0))
+        if len(deleteGames) == 0:
             # should never happen
-            logException('delete: %d rows selected' % selnum)
-        if WarningYesNo(
+            logException('delete: 0 rows selected')
+        WarningYesNo(
             m18n("Do you really want to delete <numid>%1</numid> games?<br>" \
-            "This will be final, you cannot cancel it with the cancel button", selnum)):
-            cmdList = []
-            for index in self.view.selectionModel().selectedRows(0):
-                game = index.data().toInt()[0]
-                cmdList.append("DELETE FROM score WHERE game = %d" % game)
-                cmdList.append("DELETE FROM game WHERE id = %d" % game)
-            Query(cmdList)
-            self.setQuery() # just reload entire table
+            "This will be final, you cannot cancel it with the cancel button",
+            len(deleteGames))).addCallback(answered, deleteGames)

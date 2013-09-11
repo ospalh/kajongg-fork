@@ -3,10 +3,6 @@
 """
 Copyright (C) 2008-2012 Wolfgang Rohdewald <wolfgang@rohdewald.de>
 
-The function isAlive() is taken from the book
-"Rapid GUI Programming with Python and Qt"
-by Mark Summerfield.
-
 kajongg is free software you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation either version 2 of the License, or
@@ -39,9 +35,7 @@ SERVERMARK = '&&SERVER&&'
 
 # util must not import twisted or we need to change kajongg.py
 
-import sip
-
-from common import InternalParameters
+from common import InternalParameters, Debug
 
 if InternalParameters.haveKDE:
     from kde import i18n, i18nc, Sorry, Information, NoPrompt
@@ -90,7 +84,10 @@ def appdataDir():
             shutil.move(oldPath, newPath)
             logInfo('moved %s to %s' % (oldPath,  newPath))
         if not os.path.exists(newPath):
-            os.makedirs(newPath)
+            try:
+                os.makedirs(newPath)
+            except OSError:
+                pass
         return newPath
     else:
         result = os.path.dirname(unicode(KGlobal.dirs().locateLocal("appdata", ""))) + '/'
@@ -104,7 +101,10 @@ def cacheDir():
         result = os.path.dirname(unicode(KGlobal.dirs().locateLocal("cache", "")))
         result = os.path.join(result, 'kajongg')
     if not os.path.exists(result):
-        os.makedirs(result)
+        try:
+            os.makedirs(result)
+        except OSError:
+            pass
     return result
 
 ENGLISHDICT = {}
@@ -183,13 +183,16 @@ def logMessage(msg, prio, showDialog, showStack=False, withGamePrefix=True):
     msg = translateServerMessage(msg)
     logMsg = msg
     if withGamePrefix and InternalParameters.logPrefix:
-        logMsg = '%s: %s' % (InternalParameters.logPrefix, msg)
+        if Debug.process:
+            logMsg = '%s%d: %s' % (InternalParameters.logPrefix, os.getpid(), msg)
+        else:
+            logMsg = '%s: %s' % (InternalParameters.logPrefix, msg)
     __logUnicodeMessage(prio, logMsg)
     if showStack:
         for line in traceback.format_stack()[2:-3]:
             if not 'logException' in line:
                 __logUnicodeMessage(prio, '  ' + line.strip())
-    if InternalParameters.hasGUI and showDialog:
+    if showDialog:
         if prio == logging.INFO:
             return Information(msg)
         else:
@@ -247,17 +250,6 @@ def m18nE(englishText):
 def m18ncE(dummyContext, englishText):
     """use this if you want to get the english text right now but still have the string translated"""
     return englishText
-
-def isAlive(qobj):
-    """is the underlying C++ object still valid?"""
-    if qobj is None:
-        return False
-    try:
-        sip.unwrapinstance(qobj)
-    except RuntimeError:
-        return False
-    else:
-        return True
 
 def socketName():
     """client and server process use this socket to talk to each other"""

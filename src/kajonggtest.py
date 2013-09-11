@@ -19,7 +19,7 @@ along with this program if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
-import os, sys, csv, subprocess, time, random
+import os, sys, csv, subprocess, random
 
 from optparse import OptionParser
 
@@ -146,12 +146,13 @@ def stopServers(serverProcesses):
 
 def doJobs(jobs, options, serverProcesses):
     """now execute all jobs"""
+    # pylint: disable=R0912
+    # too many local branches
     srcDir = os.path.dirname(sys.argv[0])
     clients = [None] * options.clients
     srvIdx = 0
     try:
         while jobs:
-            time.sleep(1)
             for qIdx, client in enumerate(clients):
                 if client:
                     result = client.poll()
@@ -161,13 +162,20 @@ def doJobs(jobs, options, serverProcesses):
                 if not jobs:
                     break
                 aiVariant, game = jobs.pop(0)
+                # never login to the same server twice at the
+                # same time with the same player name
+                player = int(qIdx / len(serverProcesses)) + 1
                 cmd = ['{src}/kajongg.py'.format(src=srcDir),
-                      '--ai={ai}'.format(ai=aiVariant),
                       '--game={game}'.format(game=game),
                       '--socket={sock}'.format(sock=serverProcesses[srvIdx][1]),
                       '--csv={csv}'.format(csv=options.csv),
-                      '--autoplay={ap}'.format(ap=options.ruleset)]
-                if not options.gui:
+                      '--player=Tester {player}'.format(player=player),
+                      '--ruleset={ap}'.format(ap=options.ruleset)]
+                if aiVariant != 'Default':
+                    cmd.append('--ai={ai}'.format(ai=aiVariant))
+                if options.gui:
+                    cmd.append('--demo')
+                else:
                     cmd.append('--nogui')
                 if options.playopen:
                     cmd.append('--playopen')
@@ -188,7 +196,7 @@ def parse_options():
     parser = OptionParser()
     parser.add_option('', '--gui', dest='gui', action='store_true',
         default=False, help='show graphical user interface')
-    parser.add_option('', '--autoplay', dest='ruleset',
+    parser.add_option('', '--ruleset', dest='ruleset',
         default='Testset', help='play like a robot using RULESET',
         metavar='RULESET')
     parser.add_option('', '--ai', dest='aiVariants',

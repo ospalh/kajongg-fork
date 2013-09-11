@@ -25,8 +25,9 @@ Read the user manual for a description of the interface to this scoring engine
 from collections import Counter
 
 from meld import Meld, CONCEALED, EXPOSED, CLAIMEDKONG, REST, elementKey
-from common import elements, IntDict
+from common import elements, IntDict, WINDS
 from message import Message
+from query import Query
 
 class Function(object):
     """Parent for all Function classes. We need to implement
@@ -37,6 +38,12 @@ class Function(object):
 
     def __init__(self):
         self.options = {}
+
+    def __str__(self):
+        return self.__class__.__name__
+
+    def __repr__(self):
+        return self.__class__.__name__
 
 # pylint: disable=C0111
 # the class and method names are mostly self explaining, we do not
@@ -919,6 +926,39 @@ class ScratchingPole(Function):
     def appliesToHand(hand):
         return RobbingKong.appliesToHand(hand) and hand.lastTile == 'b2'
 
+class StandardRotation(Function):
+    @staticmethod
+    def rotate(game):
+        return game.winner and game.winner.wind != 'E'
+
+class EastWonNineTimesInARow(Function):
+    nineTimes = 9
+    @staticmethod
+    def appliesToHand(hand):
+        if not hand.player:
+            return False
+        game = hand.player.game
+        return EastWonNineTimesInARow.appliesToGame(game)
+    @staticmethod
+    def appliesToGame(game, needWins=None):
+        if needWins is None:
+            needWins = EastWonNineTimesInARow.nineTimes
+            if game.isScoringGame():
+                # we are only proposing for the last needed Win
+                needWins  -= 1
+        if game.winner and game.winner.wind == 'E' and game.notRotated >= needWins:
+            prevailing = WINDS[game.roundsFinished % 4]
+            eastMJCount = int(Query("select count(1) from score "
+                "where game=%d and won=1 and wind='E' and player=%d "
+                "and prevailing='%s'" % \
+                (game.gameid, game.players['E'].nameid, prevailing)).records[0][0])
+            return eastMJCount == needWins
+        return False
+    @staticmethod
+    def rotate(game):
+        return EastWonNineTimesInARow.appliesToGame(game, needWins = EastWonNineTimesInARow.nineTimes)
+
+
 class StandardMahJongg(Function):
     @staticmethod
     def computeLastMelds(hand):
@@ -973,13 +1013,15 @@ class StandardMahJongg(Function):
         if len(hand.melds) > 7:
             # hope 7 is sufficient, 6 was not
             return set()
-        inHand = list(x.lower() for x in hand.inHand)
-        if not hand.inHand:
+        if not hand.tileNamesInHand:
             return set()
+        inHand = list(x.lower() for x in hand.tileNamesInHand)
         result = inHand[:]
         pairs = 0
         isolated = 0
         maxChows = hand.ruleset.maxChows - sum(x.isChow() for x in hand.declaredMelds)
+        # TODO: does not differentiate between maxChows == 1 and maxChows > 1
+        # test with kajonggtest and a ruleset where maxChows == 2
         if maxChows < 0:
             return set()
         if maxChows == 0:
@@ -1050,11 +1092,11 @@ class StandardMahJongg(Function):
             valueSet = set(values)
             if len(values) == 4 and len(values) == len(valueSet):
                 if values[0] + 3 == values[-1]:
-                    # print('seq4 in %s' % hand.inHand)
+                    # print('seq4 in %s' % hand.tileNamesInHand)
                     return set([color + str(values[0]), color + str(values[-1])])
             if len(values) == 7 and len(values) == len(valueSet):
                 if values[0] + 6 == values[6]:
-                    # print('seq7 in %s' % hand.inHand)
+                    # print('seq7 in %s' % hand.tileNamesInHand)
                     return set([color + str(values[0]), color + str(values[3]), color + str(values[6])])
             if len(values) == 1:
                 # only a pair of this value is possible
@@ -1204,7 +1246,7 @@ class ThirteenOrphans(Function):
 
     @staticmethod
     def computeLastMelds(hand):
-        meldSize = hand.inHand.count(hand.lastTile)
+        meldSize = hand.tileNamesInHand.count(hand.lastTile)
         return [Meld([hand.lastTile] * meldSize)]
 
     @staticmethod

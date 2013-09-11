@@ -89,7 +89,7 @@ class Players(list):
             Players.load()  # maybe somebody else already added it
             if name not in Players.allNames.values():
                 with Transaction():
-                    Query("insert into player(name) values(?)",
+                    Query("insert or ignore into player(name) values(?)",
                           list([name]))
                 Players.load()
         assert name in Players.allNames.values(), '%s not in %s' % (name, Players.allNames.values())
@@ -624,12 +624,7 @@ class Player(object):
         melds.append(mjString)
         if mjString.startswith('M') and (withTile or self.lastTile):
             melds.append('L%s%s' % (withTile or self.lastTile, self.lastMeld.joined))
-        if self.game.eastMJCount == 8 and self == self.game.winner and self.wind == 'E':
-            # eastMJCount will only be inced later, in saveHand
-            rules = [self.game.ruleset.findRule('XEAST9X')]
-        else:
-            rules = None
-        return Hand.cached(self, ' '.join(melds), computedRules=rules, robbedTile=robbedTile)
+        return Hand.cached(self, ' '.join(melds), robbedTile=robbedTile)
 
     def computeNewHand(self):
         """returns the new hand. Same as current unless we need to discard. In that
@@ -652,6 +647,8 @@ class Player(object):
 
     def possibleChows(self, tileName=None, within=None):
         """returns a unique list of lists with possible claimable chow combinations"""
+        if self.game.lastDiscard is None:
+            return []
         exposedChows = [x for x in self.__exposedMelds if x.isChow()]
         if len(exposedChows) >= self.game.ruleset.maxChows:
             return []
