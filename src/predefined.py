@@ -746,12 +746,6 @@ Hand with three pungs/kongs of winds and a pair of. Double yakuman. \
                 'Double yakuman', 'booldouble_yakuman',  parameter=False,
                 description=m18n(u'''\
 Allow double yakuman. (Big four winds always counts as double yakuman)''')))
-        # self.parameterRules.add(Rule(
-        #         u'“All simples” may be open.',
-        #        'boolall_simples_may_be_open||Omandatory', parameter=False,
-        #        description=m18n(u'''\
-# Different Japanese rule codes do or do not require that the “All simples” \
-# hand be concealed.''')))
 
 
 class JapaneseJapaneseStyleRuleset(JapaneseStyleRuleset):
