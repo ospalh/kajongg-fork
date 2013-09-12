@@ -372,6 +372,10 @@ class VisiblePlayer(Player):
         if not self.handBoard:
             return None
         string = ' '.join([self.scoringString(), self.__mjstring(singleRule, asWinner), self.__lastString(asWinner)])
+        if singleRule:
+            # singleRule may be None or note. When it is not None,
+            # Hand.cached will iterate over it. Make that work.
+            singleRule = [singleRule, ]
         return Hand.cached(self, string, computedRules=singleRule)
 
     def popupMsg(self, msg):
