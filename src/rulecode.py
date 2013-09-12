@@ -665,17 +665,14 @@ class PureDoubleChow(Function):
     def appliesToHand(hand):
         if not MostlyConcealed.appliesToHand(hand):
             return False
-        chows = [meld for meld in hand.melds if meld.isChow()]
-        if len(chows) < 2:
+        chow_start_tiles = [meld.pairs[0].lower() for meld in hand.melds
+                            if meld.isChow()]
+        try:
+            return Counter(
+                [cst for cst in chow_start_tiles]).most_common(1)[0][1] > 1
+        except ValueError:
+            # No chow, so none is most_common.
             return False
-        for count, chow1 in enumerate(chows[:-1]):
-            for chow2 in chows[count + 1:]:
-                if chow1 == chow2:
-                    hand.debug(u'Yeah, {} is just like {}'.format(
-                            chow1.pairs, chow2.pairs))
-                    return True
-        # After the loop: none of the “==” tests matched.
-        return False
 
 
 class TripleChow(Function):
