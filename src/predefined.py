@@ -568,15 +568,11 @@ Hand containing only terminals and honours. (Honroutou)''')))
 
         # Three yaku
 
-        # N.B. EMA lists “Twice Pure Double Chows” as three yaku and
-        # notes that “(n)o additional yaku for Pure Double Chow
-        # (IIPEIKOU) are counted”. Scoring it as iipeikou + iipeikou +
-        # this seems simpler for a computer program.
-        #    Rule('Two sets of  pure double chows',
-        #           'FTwicePureDoubleChow', doubles=1,
-        #          description=m18n(u'''\
-# Bonus yaku for two pure double chow/Iipeikou, counted separately. \
-# (Ryan peikou) ''')))
+        self.winnerRules.add(Rule(
+                'Twice pure double chows', 'FTwicePureDoubleChow',
+                doubles=3, description=m18n(u'''\
+Concealed hand with four chows which two and two form Pure Double
+Chows (Ryan peikou)''')))
 
         # Five yaku (Starting at five fan (yaku + dora) the
         # fu/minipoints/points are always ignored)

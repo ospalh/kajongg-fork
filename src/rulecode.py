@@ -665,6 +665,11 @@ class PureDoubleChow(Function):
     def appliesToHand(hand):
         if not MostlyConcealed.appliesToHand(hand):
             return False
+        if TwicePureDoubleChow.appliesToHand(hand):
+            # From the rule for “Twice pure double chows”: No
+            # additional yaku for Pure Double Chow (IIPEIKOU) are
+            # counted.
+            return False
         chow_start_tiles = [meld.pairs[0].lower() for meld in hand.melds
                             if meld.isChow()]
         try:
@@ -672,6 +677,26 @@ class PureDoubleChow(Function):
                 [cst for cst in chow_start_tiles]).most_common(1)[0][1] > 1
         except ValueError:
             # No chow, so none is most_common.
+            return False
+
+
+class TwicePureDoubleChow(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        if not MostlyConcealed.appliesToHand(hand):
+            return False
+        chow_start_tiles = [meld.pairs[0].lower() for meld in hand.melds
+                            if meld.isChow()]
+        try:
+            two_most_common = Counter(
+                [cst for cst in chow_start_tiles]).most_common(2)
+        except ValueError:
+            # No chow, so none is most_common.
+            return False
+        try:
+            return two_most_common[0][1] == 2 and two_most_common[1][1] == 2
+        except IndexError:
+            # No second chow
             return False
 
 
