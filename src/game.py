@@ -689,7 +689,7 @@ class Game(object):
         if self.ruleset.basicStyle == Ruleset.Japanese:
             # Japanese scoring is so different that it is easier to
             # just put it in an extra method.
-            return self._payJapaneseHand()
+            return self.__payJapaneseHand()
         winner = self.__winner
         if winner:
             winner.wonCount += 1
@@ -724,7 +724,7 @@ class Game(object):
                     if player1 != winner:
                         player1.getsPayment(-player2.handTotal * efactor)
 
-    def _payJapaneseHand(self):
+    def __payJapaneseHand(self):
         u"""
         Pay the points for a hand, Japanese style
 
