@@ -32,6 +32,14 @@ from query import Query, Transaction
 
 import rulecode
 
+# Give names to Japanese style higher limits and the factors in
+# relation to mangan/5 fan/simple limit.
+HANEMAN_FACTOR = 1.5
+BAIMAN_FACTOR =  2
+SANBAIMAN_FACTOR = 3
+YAKUMAN_FACTOR = 4
+
+
 class Score(object):
     """holds all parts contributing to a score. It has two use cases:
     1. for defining what a rules does: either points or doubles or limits, holding never more than one unit
@@ -40,11 +48,19 @@ class Score(object):
     For the first use case only we have the attributes value and unit"""
 
 
-    def __init__(self, points=0, doubles=0, limits=0, ruleset=None):
+    def __init__(
+            self, points=0, doubles=0, limits=0, ruleset=None,
+            limits_limit=None):
         self.points = 0 # define the types for those values
         self.doubles = 0
         self.limits = 0.0
         self.ruleset = ruleset
+        self.limits_limit = limits_limit
+        # For European Riichi scoring there is a maximum of one limit
+        # (yakuman), with the exception of Four big winds, which gets
+        # two limits. We have to keep track of that somehow. Use duck
+        # typing like with ruleset. Other codes (Chinese, Japanese
+        # Riichi) can simply ignore this.
         self.points = type(self.points)(points)
         self.doubles = type(self.doubles)(doubles)
         self.limits = type(self.limits)(limits)
@@ -54,6 +70,7 @@ class Score(object):
     def clear(self):
         """set all to 0"""
         self.points = self.doubles = self.limits = 0
+        self.limits_limit = None
 
     def change(self, unitName, value):
         """sets value for unitName. If changed, return True"""
@@ -82,6 +99,8 @@ class Score(object):
             parts.append('doubles=%d' % self.doubles)
         if self.limits:
             parts.append('limits=%f' % self.limits)
+        if self.limits_limit:
+            parts.append('limits_limit=%f' % self.limits_limit)
         return ' '.join(parts)
 
     def contentStr(self):
@@ -93,16 +112,23 @@ class Score(object):
             parts.append(m18nc('Kajongg', '%1 doubles', self.doubles))
         if self.limits:
             parts.append(m18nc('Kajongg', '%1 limits', self.limits))
+        if self.limits_limit:
+            parts.append(m18nc(
+                    'Kajongg', '%1 limits_limit', self.limits_limit))
         return ' '.join(parts)
 
     def __eq__(self, other):
         """ == comparison """
         assert isinstance(other, Score)
-        return self.points == other.points and self.doubles == other.doubles and self.limits == other.limits
+        return self.points == other.points and self.doubles == other.doubles \
+            and self.limits == other.limits \
+            and self.limits_limit == other.limits_limit
 
     def __ne__(self, other):
         """ != comparison """
-        return self.points != other.points or self.doubles != other.doubles or self.limits != other.limits
+        return self.points != other.points or self.doubles != other.doubles \
+            or self.limits != other.limits \
+            or self.limits_limit != other.limits_limit
 
     def __lt__(self, other):
         return self.total() < other.total()
@@ -118,13 +144,27 @@ class Score(object):
 
     def __add__(self, other):
         """implement adding Score"""
-        return Score(self.points + other.points, self.doubles+other.doubles,
-            max(self.limits, other.limits), self.ruleset or other.ruleset)
+        # Keeping track of the limits limit makes this slightly
+        # trickier than before.
+        if self.limits_limit and other.limits_limit:
+            # Both have been set. Use the biggest
+            nll = max(self.limits_limit, other.limits_limit)
+        else:
+            # 0 or 1 have been set.
+            nll = self.limits_limit or other.limits_limit
+        return Score(
+            self.points + other.points, self.doubles + other.doubles,
+            max(self.limits, other.limits), self.ruleset or other.ruleset,
+            nll)
 
     def total(self):
         """the total score"""
         if self.ruleset is None:
             raise Exception('Score.total: ruleset unknown for %s' % self)
+        if self.ruleset.basicStyle == Ruleset.Japanese:
+            # The Japanese rules are so convoluted that they are best
+            # handled in an extra method.
+            return self.japaneseTotal()
         score = int(self.points * ( 2 ** self.doubles))
         if self.limits:
             if self.limits >= 1:
@@ -138,6 +178,51 @@ class Score(object):
         if not self.ruleset.roofOff:
             score = min(score, self.ruleset.limit)
         return score
+
+    def japaneseTotal(self):
+        u"""
+        Total score according to Japanese rules.
+
+        This implements the two extra doubles, the half limit table
+        and the convoluted European Riichi double yakuman rules.
+        """
+        print(u'fu: {}, han: {}, yakuman: {}, yakuman_limit: {}'.format(
+                self.points, self.doubles, self.limits, self.limits_limit))
+        limits = self.limits
+        try:
+            double_yakuman = self.ruleset.double_yakuman
+        except AttributeError:
+            # Rule not defined.
+            double_yakuman = False
+        if not double_yakuman:
+            limits = min(limits, self.limits_limit or 1)
+        # Now the actual score
+        if limits:
+            # yakuman
+            return limits * self.ruleset.limit * YAKUMAN_FACTOR
+        if self.doubles >= 13:
+            # Looks like you get kazoe yakuman (counted limits) only
+            # for non-yakuman hands. So put it below the first return.
+            return self.ruleset.limit * YAKUMAN_FACTOR
+        if self.doubles >= 11:
+            return self.ruleset.limit * SANBAIMAN_FACTOR
+        if self.doubles >= 8:
+            return self.ruleset.limit * BAIMAN_FACTOR
+        if self.doubles >= 6:
+            return self.ruleset.limit * HANEMAN_FACTOR
+        if self.doubles >= 5:
+            return self.ruleset.limit
+        # Four or less han/doubles. Actually look at the points. And
+        # maybe use them.
+        points = self.points
+        if points != 25 and (points // 10 != points / 10.0):
+            # Round up to next ten, with some tricks.
+            # 25 is the "No more minipoits for seven pairs" special case.
+            points = (points // 10) * 10 + 10
+            # We know that we have points = XY with Y!=0. So (points
+            # // 10) * 10 gives X0. Then add the extra ten to do the
+            # round up
+        return min(self.ruleset.limit, int(points * 2**(2 + self.doubles)))
 
     def __int__(self):
         """the total score"""
@@ -653,14 +738,15 @@ class Rule(object):
     # pylint: disable=R0913,R0902
     # pylint we need more than 10 instance attributes
 
-    def __init__(self, name, definition='', points = 0, doubles = 0, limits = 0, parameter = None,
-            description=None, debug=False):
+    def __init__(
+            self, name, definition='', points=0, doubles=0, limits=0,
+            limits_limit=None, parameter=None, description=None, debug=False):
         self.options = {}
         self.function = None
         self.hasSelectable = False
         self.name = name
         self.description = description
-        self.score = Score(points, doubles, limits)
+        self.score = Score(points, doubles, limits, limits_limit)
         self._definition = None
         self.parName = ''
         self.parameter = ''
