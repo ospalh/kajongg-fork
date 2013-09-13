@@ -724,89 +724,34 @@ class Game(object):
                         player1.getsPayment(-player2.handTotal * efactor)
 
     def __payJapaneseHand():
+        return
         u"""
         Pay the points for a hand, Japanese style
-        """
 
-        # Unfortunately, the Japanese code is so much of a mess that
-        # the Score() mechanism doesn’t really work. You get yakuman
-        # for 13 han, either added or for a yakuman hand. But when you
-        # get two yakuman hands, or yakuman + 13 other han, it still
-        # is only single yakuman. Unless your hand is Four big
-        # winds. Or when you play with a variant that does allow
-        # double yakuman.  In short, you need to know which rules
-        # where active to calculate the score. That is beyond the
-        # Score() class. So we have to do this at least partially by
-        # hand. And that is without mentioning the limit tables, the
-        # discarder-pays-for-all and the rounding.
+        Only the winner gets paid. When it was a ron (win on discard),
+        the discarder always pays. (This is similar to “dangerous
+        play” in Chinese rules, only *every* discard is treated that
+        way.) Also, the points are rounded to full hundreds.
+        """
+        # TODO: handle bankrupcy.
         winner = self.__winner
         if winner:
             winner.wonCount += 1
-            score = winner.hand.score
             if Debug.explain:
                 self.debug('%s: %s' % (winner, winner.hand.string))
                 for line in winner.hand.explain():
                     self.debug('   %s' % (line))
-            fu = score.points
-            han = score.doubles
-            yakuman = score.limits + han // 13
-            try:
-                double_yakuman = self.ruleset.double_yakuman
-            except AttributeError:
-                # Rule not defined.
-                double_yakuman = False
-            if not double_yakuman:
-                yakuman = min(yakuman, 1)
-                if [bfw for bfw in used_rules if bfw.limits == 2]:
-                    # We have used a native double yakuman rule
-                    # (i.e. Big four winds)
-                    yakuman = 2
-            hand_points = self._handPoints(fu, han, yakuman)
+            # Now check for tsumo or who discarded
             for loser in self.players:
                 if loser is winner:
                     # Erm, not a loser after all.
                     continue
-
             # Return the riichi bet. TODO
         else:
             # Here we should check for  Nagashi mangan. TODO
             # And settle the noten penalties. TODO
             # Or maybe settle chombo penalties. TODO
             pass
-
-
-    def _hand_points(self, fu, han, yakuman):
-        u"""
-        Return the basic points to be payed.
-
-        Return the points a non-east player should pay to another
-        non-east player, not rounded to hundreds.
-
-        This implements two rules, the limit hand (mangan .. yakuman)
-        table, and the <= 4 han calculation using the fu (base
-        points/minipoints).
-        """
-        if yakuman:
-            return 8000 * yakuman
-        if han >= 11:
-            # sanbaiman
-            return 6000
-        if han >= 8:
-            # baiman
-            return 4000
-        if han >= 6:
-            # haneman
-            return 3000
-        if han == 5:
-            # yakuman
-            return 2000
-        # Non (half-)limit.
-        return min(2000, fu * 2**(2 + han))
-
-
-    def __roundC(self, i):
-        u"""Return the number, rounded up to the next hundred."""
-        return int(math.ceil(i/100.0) * 100)
 
 
     def lastMoves(self, only=None, without=None):
