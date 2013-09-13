@@ -345,7 +345,6 @@ class JapaneseStyleRuleset(PredefinedRuleset):
         u"""Initialize the rules."""
         PredefinedRuleset.__init__(
             self, name or m18nE(u'Japanese style rules (EMA)'))
-        self.basicStyle = Ruleset.Japanese
 
     def _initRuleset(self):
         """Sets the description"""
@@ -703,6 +702,9 @@ Hand with three pungs/kongs of winds. Double yakuman. \
         sense to change them. Some values make no sense at all here,
         so they are just hard-coded in to some value.
         """
+        self.parameterRules.add(Rule(
+                'Japanese game', 'intbasicStyle||Ointernal',
+                parameter=Ruleset.Japanese))
         # Note the min *and* max for yakuman and kong box size.
         self.parameterRules.add(Rule(
                 'Points for mangan',
