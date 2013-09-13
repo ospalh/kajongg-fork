@@ -686,10 +686,10 @@ class Game(object):
         """pay the scores"""
         # pylint: disable=R0912
         # too many branches
-        if False and self.ruleset.basicStyle == Ruleset.Japanese:
+        if self.ruleset.basicStyle == Ruleset.Japanese:
             # Japanese scoring is so different that it is easier to
             # just put it in an extra method.
-            return __payJapaneseHand()
+            return self._payJapaneseHand()
         winner = self.__winner
         if winner:
             winner.wonCount += 1
@@ -724,8 +724,7 @@ class Game(object):
                     if player1 != winner:
                         player1.getsPayment(-player2.handTotal * efactor)
 
-    def __payJapaneseHand():
-        return
+    def _payJapaneseHand(self):
         u"""
         Pay the points for a hand, Japanese style
 
@@ -734,20 +733,53 @@ class Game(object):
         play” in Chinese rules, only *every* discard is treated that
         way.) Also, the points are rounded to full hundreds.
         """
+
+        def upToHundred(i):
+            """Return number, rounded up to the xext hundred."""
+            # We play around with // and / here. See also rule.Score,
+            # where we do the same with 10 instead of 100.
+            if i // 1 == i / 100.0:
+                # Already a multiple of 100.
+                return i
+            # Not a multiple of 100
+            return (i // 100) * 100 + 100
+
         # TODO: handle bankrupcy.
         winner = self.__winner
         if winner:
+            # TODO: Hand back riichi bet
             winner.wonCount += 1
+            payer = self.lastDiscardBy
+            score = winner.handTotal
             if Debug.explain:
-                self.debug('%s: %s' % (winner, winner.hand.string))
-                for line in winner.hand.explain():
-                    self.debug('   %s' % (line))
-            # Now check for tsumo or who discarded
-            for loser in self.players:
-                if loser is winner:
-                    # Erm, not a loser after all.
-                    continue
-            # Return the riichi bet. TODO
+                if not self.belongsToRobotPlayer():
+                    self.debug('%s: %s' % (winner, winner.hand.string))
+                    for line in winner.hand.explain():
+                        self.debug('   %s' % (line))
+            # score = winner.handTotal + self.repeats * 100
+            if payer:
+                # Ron
+                if Debug.explain:
+                    self.debug('%s: winner %s. %s pays for all' % \
+                                   (self.handId(), winner, payer))
+                score = score * 6 if winner.wind == 'E' else score * 4
+                score = upToHundred(score)
+                payer.getsPayment(-score)
+                winner.getsPayment(score)
+            else:
+                # Tsumo
+                if winner.wind == 'E':
+                    score *= 2
+                for loser in self.players:
+                    if loser is winner:
+                        # Erm, not a loser after all.
+                        continue
+                    if loser.wind == 'E':
+                        loser.getsPayment(-upToHundred(2 * score))
+                        winner.getsPayment(upToHundred(2 * score))
+                    else:
+                        loser.getsPayment(-upToHundred(score))
+                        winner.getsPayment(upToHundred(score))
         else:
             # Here we should check for  Nagashi mangan. TODO
             # And settle the noten penalties. TODO
