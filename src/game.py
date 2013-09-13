@@ -738,7 +738,7 @@ class Game(object):
             """Return number, rounded up to the xext hundred."""
             # We play around with // and / here. See also rule.Score,
             # where we do the same with 10 instead of 100.
-            if i // 1 == i / 100.0:
+            if i // 100 == i / 100.0:
                 # Already a multiple of 100.
                 return i
             # Not a multiple of 100
