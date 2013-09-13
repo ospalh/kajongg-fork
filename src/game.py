@@ -786,6 +786,10 @@ class Game(object):
         """returns a list of explaining texts if discarding tile
         would be Dangerous game for forPlayer. One text for each
         reason - there might be more than one"""
+        if self.ruleset.basicStyle == Ruleset.Japanese:
+            # Tiles are not especially dangerous for anybody from the
+            # rules perspective in Japanese games.
+            return []
         if isinstance(tile, Tile):
             tile = tile.element
         tile = tile.lower()
@@ -801,6 +805,8 @@ class Game(object):
 
     def computeDangerous(self, playerChanged=None):
         """recompute gamewide dangerous tiles. Either for playerChanged or for all players"""
+        # We compute them even for Japanese games. They can be a
+        # useful hint for the AI.
         self.dangerousTiles = list()
         if playerChanged:
             playerChanged.findDangerousTiles()

@@ -473,6 +473,10 @@ class Player(object):
         """returns True if the player has no choice, otherwise False.
         Exposing may be a meld which will be exposed before we might
         play dangerous"""
+        if self.game.ruleset.basicStyle == Ruleset.Japanese:
+            # There is no *especially* dangerous play in Riichi. The
+            # discarder *always* pays for all on ron.
+            return False
         if self == self.game.activePlayer and exposing and len(exposing) == 4:
             # declaring a kong is never dangerous because we get
             # an unknown replacement
