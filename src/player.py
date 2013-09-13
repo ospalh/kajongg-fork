@@ -524,11 +524,9 @@ class Player(object):
         # show the winner hand.
         if self is self.game.winner:
             # We have won. Show.
-            print('Winner! Show tiles.')
             return True
         # Riichi, abortive draws and noten penalties are not
         # implemented yet.
-        print('Loser. Don’t show tiles.')
         return False
 
     def exposeMeld(self, meldTiles, calledTile=None):
