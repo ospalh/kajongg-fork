@@ -124,6 +124,7 @@ class Game(object):
         self.handDiscardCount = 0
         self.divideAt = None
         self.lastDiscard = None # always uppercase
+        self.lastDiscardBy = None  # Who dropped the last tile.
         self.visibleTiles = IntDict()
         self.discardedTiles = IntDict(self.visibleTiles) # tile names are always lowercase
         self.dangerousTiles = list()
@@ -953,6 +954,10 @@ class RemoteGame(PlayingGame):
         # too many branches
         if player != self.activePlayer:
             raise Exception('Player %s discards but %s is active' % (player, self.activePlayer))
+        self.lastDiscardBy = player
+        # Keep track who discarded the tile. In Japanese style
+        # scoring, the discarder always pays for all (similar to
+        # Chinese dangerous play).
         self.discardedTiles[tileName.lower()] += 1
         player.discarded.append(tileName)
         concealedTileName = self.__concealedTileName(tileName) # has side effect, needs to be called

@@ -315,6 +315,7 @@ class Player(object):
             self.lastSource = 'e'
         else:
             self.game.lastDiscard = None
+            self.game.lastDiscardBy = None
             self.lastSource = 'w'
         return tile
 
@@ -455,6 +456,9 @@ class Player(object):
         else:
             self.game.lastDiscard = Tile(tileName)
         self.game.lastDiscard.element = self.game.lastDiscard.upper()
+        self.game.lastDiscardBy = self
+        # To add insult to injury, we even may have to pay for
+        # everybody.
 
     def scoreMatchesServer(self, score):
         """do we compute the same score as the server does?"""

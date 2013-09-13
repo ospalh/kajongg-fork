@@ -591,6 +591,7 @@ class ServerTable(Table):
             player.lastSource = 'd'
         player.exposeMeld(hasTiles, claimedTile)
         self.game.lastDiscard = None
+        self.game.lastDiscardBy = None
         block = DeferredBlock(self)
         if (nextMessage != Message.Kong
                 and self.game.dangerousFor(discardingPlayer, lastDiscard)

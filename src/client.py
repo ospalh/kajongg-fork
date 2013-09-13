@@ -408,6 +408,7 @@ class Client(pb.Referenceable):
         """somebody claimed a discarded tile"""
         calledTile = self.game.lastDiscard
         self.game.lastDiscard = None
+        self.game.lastDiscardBy = None
         calledTileName = calledTile.element
         self.game.discardedTiles[calledTileName.lower()] -= 1
         assert calledTileName in move.source, '%s %s'% (calledTileName, move.source)
