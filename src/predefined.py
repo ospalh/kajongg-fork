@@ -445,12 +445,20 @@ Mahjong on the discard after the last tile in the wall. (Houtei)''')))
         self.mjRules.add(Rule(
                 'Standard concealed ron', 'FStandardConcealedRon', points=30))
         self.mjRules.add(Rule(
-                'Seven pairs', 'FSevenPairs||Ono_other_points', doubles=2,
-                points=25))
-        # New option no_other_points. “Seven Pairs always scores
-        # exactly 25 minipoints; extra minipoints (fu) for e.g. a pair of
-        # dragons is not awarded.” This is different from Oabsolute,
-        # as extra han are counted (afais).
+                'Seven pairs win', 'FSevenPairs',  points=25,
+                description=m18n(u'''\
+The points for winning with seven pairs.''')))
+        # There is the special rule “Seven Pairs always scores exactly
+        # 25 minipoints; extra minipoints for e.g. a pair of dragons
+        # is not awarded.” That is dealt with in the dragon and wind
+        # pair meld rules and the other waiting pattern and last tile
+        # is.
+        # There is one more catch: in general the fu/minipoints/points
+        # are rounded up to full tens, *except* for the 25 from seven
+        # pairs. As the 25 is the only odd number, we just check for
+        # 25 in the Score class rather then drag around another option
+        # with the score. So changing this may cause problems. But see
+        # Kansai rules below for a safe way to change this.
         self.mjRules.add(Rule(
                 'Thirteen Orphans', 'FThirteenOrphans||Omayrobhiddenkong',
                 limits=1, description=m18n('''\
@@ -530,7 +538,12 @@ Bonus yaku for a pure straight hand being concealed. \
         # * Under the sea, tsumo
 
         # Two yaku hands:
-        # Seven pairs is at mjRules above
+        # Seven pairs is at mjRules above, too.
+
+        self.mjRules.add(Rule(
+                'Seven pairs yaku', 'FSevenPairs', doubles=2,
+                description=m18n(u'''\
+The doubles for winning with seven pairs.''')))
 
         # self.winnerRules.add(
         #     Rule('Triple pung', 'FTriplePung', doubles=2,
@@ -629,13 +642,12 @@ are: green dragons 2, 3, 4, 6 and 8 of bamboo (Ryuu iisou)''')))
                 description=m18n(u'''\
 Hand with three pungs/kongs of winds and a pair of . (Shou suushi)''')))
         self.winnerRules.add(Rule(
-                'Big four winds', 'FBigFourJoys', limits=2,
+                'Big four winds', 'FBigFourJoys', limits=2, limits_limit=2,
                 description=m18n(u'''\
-Hand with three pungs/kongs of winds and a pair of. Double yakuman. \
+Hand with three pungs/kongs of winds. Double yakuman. \
 (Dai suushi)''')))
-
         # Here we should add the waiting pattern rules.
-        # and the 2 (read 10) open(!) pinfu points.
+        # and the 2 open(!) pinfu and tsumo points.
         # self.winnerRules.add(
         #     Rule('Last Tile Completes Pair of 2..8',
         #          'FLastTileCompletesPairMinor', points=2))
@@ -697,22 +709,18 @@ Hand with three pungs/kongs of winds and a pair of. Double yakuman. \
         """
         # Note the min *and* max for yakuman and kong box size.
         self.parameterRules.add(Rule(
-                'Points for yakuman',
-                'intlimit||Omandatory||Omin=8000||Omax=8000', parameter=8000,
-                description=m18n('Yakuman base score is 8000')))
+                'Points for mangan',
+                'intlimit||Omandatory', parameter=2000,
+                description=m18n(u'''\
+The points for a mangan or five fan (doubles) hand. Higher limits \
+(yakuman &c.) are calculated from this.''')))
         self.parameterRules.add(Rule(
-                'Play with the roof off', 'boolroofOff||Omandatory',
-                parameter=False,
-                description=m18n('This parameter is ignored.')))
+                'Play with the roof off', 'boolroofOff||Omandatory||Ointernal',
+                parameter=False))
         self.parameterRules.add(Rule(
                 'Size of the dead wall',
-                'intkongBoxSize||Omandatory||Omin=14||Omax=14',
-                parameter=14,
-                description=m18n('The dead wall contains 14 tiles')))
-        # Each of the 14 stones in the dead wall may be used. It MUST
-        # NOT be <14. Setting it to >14 could work, but doing a range
-        # check here is too much hassle. Oh. and it is a dead wall,
-        # that should be replenished. TODO.
+                'intkongBoxSize||Omandatory||Ointernal',
+                parameter=14))
         self.parameterRules.add(Rule(
                 'Minipoints (fu) needed to win', 'intminMJPoints||Omandatory',
                 parameter=0))
