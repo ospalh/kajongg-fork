@@ -724,9 +724,16 @@ class Game(object):
                         player1.getsPayment(-player2.handTotal * efactor)
 
     def __payJapaneseHand():
+        return
         u"""
         Pay the points for a hand, Japanese style
+
+        Only the winner gets paid. When it was a ron (win on discard),
+        the discarder always pays. (This is similar to “dangerous
+        play” in Chinese rules, only *every* discard is treated that
+        way.) Also, the points are rounded to full hundreds.
         """
+        # TODO: handle bankrupcy.
         winner = self.__winner
         if winner:
             winner.wonCount += 1
@@ -734,15 +741,17 @@ class Game(object):
                 self.debug('%s: %s' % (winner, winner.hand.string))
                 for line in winner.hand.explain():
                     self.debug('   %s' % (line))
-            # Here we should implement the value tables.
-            points, doubles = winner.handPointsDoubles
-
+            # Now check for tsumo or who discarded
             for loser in self.players:
                 if loser is winner:
                     # Erm, not a loser after all.
                     continue
-
-
+            # Return the riichi bet. TODO
+        else:
+            # Here we should check for  Nagashi mangan. TODO
+            # And settle the noten penalties. TODO
+            # Or maybe settle chombo penalties. TODO
+            pass
 
 
     def lastMoves(self, only=None, without=None):
