@@ -186,8 +186,6 @@ class Score(object):
         This implements the two extra doubles, the half limit table
         and the convoluted European Riichi double yakuman rules.
         """
-        print(u'fu: {}, han: {}, yakuman: {}, yakuman_limit: {}'.format(
-                self.points, self.doubles, self.limits, self.limits_limit))
         limits = self.limits
         try:
             double_yakuman = self.ruleset.double_yakuman
