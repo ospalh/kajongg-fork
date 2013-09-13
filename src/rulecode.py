@@ -675,7 +675,7 @@ class PureDoubleChow(Function):
         try:
             return Counter(
                 [cst for cst in chow_start_tiles]).most_common(1)[0][1] > 1
-        except ValueError:
+        except (ValueError, IndexError):
             # No chow, so none is most_common.
             return False
 
@@ -708,7 +708,7 @@ class TripleChow(Function):
         try:
             (most_common_chow, ) = Counter(
                 [cst[1] for cst in chow_start_tiles]).most_common(1)
-        except ValueError:
+        except (ValueError, IndexError):
             # No chow, so none is most_common.
             return False
         return 'b' + most_common_chow[0] in chow_start_tiles \
@@ -740,7 +740,7 @@ class PureStraight(Function):
         try:
             (most_common_chow, ) = Counter(
                 [cst[0] for cst in chow_start_tiles]).most_common(1)
-        except ValueError:
+        except (ValueError, IndexError):
             # No chow, so none is most_common.
             return False
         return most_common_chow[0] + '1' in chow_start_tiles \
