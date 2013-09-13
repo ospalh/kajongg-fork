@@ -445,7 +445,7 @@ Mahjong on the discard after the last tile in the wall. (Houtei)''')))
         self.mjRules.add(Rule(
                 'Standard concealed ron', 'FStandardConcealedRon', points=30))
         self.mjRules.add(Rule(
-                'Seven pairs win', 'FSevenPairs',  points=25,
+                'Seven pairs', 'FSevenPairs',  points=25,
                 description=m18n(u'''\
 The points for winning with seven pairs.''')))
         # There is the special rule “Seven Pairs always scores exactly
@@ -729,18 +729,17 @@ The points for a mangan or five fan (doubles) hand. Higher limits \
             Rule('Claim Timeout', 'intclaimTimeout||Omandatory', parameter=5))
         # The EMA rules say 3s. May be too quick for beginners.
         self.parameterRules.add(Rule(
-                'Play with Bonus Tiles', 'boolwithBonusTiles||OMandatory',
-                parameter=False, description=m18n(
-                    'Japanese mahjong is played without bonus tiles.')))
+                'Play with Bonus Tiles',
+                'boolwithBonusTiles||OMandatory||Ointernal',
+                parameter=False,))
         self.parameterRules.add(Rule(
                 'Number of rounds in game', 'intminRounds||OMandatory',
                 parameter=2, description=m18n(
                     'Only east and south wind rounds are played.')))
         self.parameterRules.add(Rule(
                 'Number of allowed chows',
-                'intmaxChows||Omandatory||Omin=4||Omax=4',
-                 parameter=4, description=m18n(
-                    u'Different yaku demand between two and four chows.')))
+                'intmaxChows||Omandatory||Ointernal',
+                 parameter=4,))
         self.parameterRules.add(Rule(
                 'Must declare calling hand',
                 'boolmustDeclareCallingHand||Omandatory', parameter=False,
@@ -788,6 +787,28 @@ class JapaneseJapaneseStyleRuleset(JapaneseStyleRuleset):
                 description=m18n(u'''\
 Hand with no terminals and honours. (Tanyao chuu)''')))
 
+class KansaiJapaneseStyleRuleset(JapaneseJapaneseStyleRuleset):
+    u"""
+    Slight variaton of Japanese Riichi rules.
+
+    According to Wikipedia, in the Kansai region, Seven Pairs is 50
+    fu, one yaku.
+    """
+
+    def __init__(self, name=None):
+        u"""Initialize the rules."""
+        JapaneseJapaneseStyleRuleset.__init__(
+            self, name or m18nE(u'Japanese style rules (Kansai)'))
+
+    def _initRuleset(self):
+        """Sets the description"""
+        self.description = m18n(
+            u'Japanese style rules, Kansei variant (work in progress)')
+
+    def loadRules(self):
+        JapaneseJapaneseStyleRuleset.loadRules(self)
+        self.winnerRules['Seven pairs yaku'].doubles = 1
+        self.winnerRules['Seven pairs'].points = 50
 
 
 def loadPredefinedRulesets():
