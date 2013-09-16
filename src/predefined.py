@@ -615,15 +615,15 @@ Bonus yaku for a full flush hand being concealed. (Chinitsu)''')))
                 'Four kongs', 'FFourfoldPlenty', limits=1,
                 description=m18n('Hand with four kongs (Suu kan tsu)')))
         self.winnerRules.add(Rule(
-                'All green', 'FAllGreen',  limits=1, description=m18n(
-                    u''' Hand composed entirely of green tiles. Green tiles \
-are: green dragons 2, 3, 4, 6 and 8 of bamboo (Ryuu iisou)''')))
+                'All green', 'FAllGreen',  limits=1, description=m18n(u'''\
+Hand composed entirely of green tiles. Green tiles are: \
+green dragons and 2, 3, 4, 6 and 8 of bamboo (Ryuu iisou)''')))
         self.winnerRules.add(Rule(
                 'All terminals', 'FAllTerminals', limits=1, description=m18n(
                     'Hand composed entirely of terminal tiles. (Chinrouto)')))
         self.winnerRules.add(Rule(
-                'All Honours', 'FOnlyHonors', limits=1, description=m18n(
-                    'Hand composed entirely of honour tiles. (Tsuu iisou)')))
+                'All Honours', 'FOnlyHonors', limits=1, description=m18n(u'''\
+Hand composed entirely of honour tiles. (Tsuu iisou)''')))
         self.winnerRules.add(Rule(
                 'Big three dragons', 'FBigThreeDragons', limits=1,
                 description=m18n(
