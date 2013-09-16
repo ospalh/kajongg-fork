@@ -446,7 +446,7 @@ Mahjong on the discard after the last tile in the wall. (Houtei)''')))
         self.mjRules.add(Rule(
                 'Seven pairs', 'FSevenPairs',  points=25,
                 description=m18n(u'''\
-The points for winning with seven pairs.''')))
+The points for winning with seven pairs. See also winner rules.''')))
         # There is the special rule “Seven Pairs always scores exactly
         # 25 minipoints; extra minipoints for e.g. a pair of dragons
         # is not awarded.” That is dealt with in the dragon and wind
@@ -539,10 +539,10 @@ Bonus yaku for a pure straight hand being concealed. \
         # Two yaku hands:
         # Seven pairs is at mjRules above, too.
 
-        self.mjRules.add(Rule(
+        self.winnerRules.add(Rule(
                 'Seven pairs yaku', 'FSevenPairs', doubles=2,
                 description=m18n(u'''\
-The doubles for winning with seven pairs.''')))
+The doubles for winning with seven pairs. See also Mah-jongg rules.''')))
 
         # self.winnerRules.add(
         #     Rule('Triple pung', 'FTriplePung', doubles=2,
