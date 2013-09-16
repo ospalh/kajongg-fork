@@ -486,9 +486,10 @@ any one extra tile in the same suit. (Chuuren pooto)''')))
                 'All simples', 'FAllSimples', doubles=1, description=m18n(u'''\
 Concealed hand with no terminals and honours. (Tanyao chuu)''')))
         # self.winnerRules.add(Rule(
-        #         'Pinfu', 'FPinfu||Ono_other_points', doubles=1,
+        #         'Concealend pinfu', 'FConcealedPinfu', doubles=1,
         #         description=m18n('''\
-# Concealed all chows hand with a valueless pair.''')))
+# Concealed all chows hand with a valueless pair. Must finish on \
+# a two-sided wait.''')))
         # N.B.: the appliesToHand and Candidate functions must
         # implement the two-sided wait condition.
 
