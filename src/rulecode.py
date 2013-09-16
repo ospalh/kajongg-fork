@@ -151,6 +151,63 @@ class LastTileCompletesPairMinor(Function):
             and hand.lastMeld.pairs[0][0] == hand.lastMeld.pairs[1][0]
             and hand.lastTile[1] in '2345678')
 
+
+class SingleWait(Function):
+    u"""
+    Single wait is waiting to finish the pair.
+
+    Single wait is waiting to finish the pair, but it is not counted
+    for Seven pairs.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        if not hand.lastMeld:
+            return
+        if SevenPairs.appliesToHand(hand):
+            return False
+        return hand.lastMeld and len(hand.lastMeld) == 2 \
+            and hand.lastMeld.pairs[0][0] == hand.lastMeld.pairs[1][0]
+
+
+class EdgeWait(Function):
+    u"""
+    Edge wait is waiting to finish a 123 chow on a 3 or a 789 chow on a 7.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        if not hand.lastMeld or not hand.lastMeld.isChow():
+            return False
+        lm_n = [pair[1] for pair in hand.lastMeld.pairs]
+        print('edge wait? lm_n = {}'.format(lm_n))
+        return (lm_n[2] == '3' and hand.lastTile[1] == '3') \
+            or (lm_n[0] == '7' and hand.lastTile[1] == '7')
+
+
+class ClosedWait(Function):
+    u"""Closed wait is waiting to finish on an 'inside straight'."""
+    @staticmethod
+    def appliesToHand(hand):
+        if not hand.lastMeld or not hand.lastMeld.isChow():
+            return False
+        print('closed wait? lmp1 = {}, lt'.format(hand.lastMeld.pairs[1], hand.lastTile[1]))
+        return hand.lastMeld.pairs[1][1] == hand.lastTile[1]
+
+
+class OpenPinfu(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        return not MostlyConcealed.appliesToHand(hand) \
+            and ZeroPointHand.appliesToHand(hand)
+
+
+class SelfDraw(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        if not hand.lastSource or ConcealedPinfu.appliesToHand(hand):
+            return False
+        return not (hand.lastSource in 'dkZ')
+
+
 class Flower(Function):
     @staticmethod
     def appliesToMeld(dummyHand, meld):
@@ -177,6 +234,26 @@ class ZeroPointHand(Function):
     @staticmethod
     def appliesToHand(hand):
         return not any(x.meld for x in hand.usedRules if x.meld and len(x.meld) > 1)
+
+class ConcealedPinfu(Function):
+    u"""
+    Concealend pinfu.
+
+    Concealed all chows hand with a valueless pair.
+
+    TODO: The winning tile is required to finish a chow with a
+    two-sided wait.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        if not MostlyConcealed.appliesToHand(hand):
+            return False
+        # The wait rule might be implemented by checking that none of
+        # the waiting points rules applies. That might actually be in
+        # the ZeroPointHand definition alreandy. Btw. we ignore
+        # flowers here.
+        return not any(x.meld for x in hand.usedRules if x.meld)
+
 
 class NoChow(Function):
     @staticmethod
@@ -784,10 +861,14 @@ class SevenPairs(Function):
     def maybeCallingOrWon(hand):
         return len(hand.declaredMelds) < 2
 
-    def appliesToHand(self, hand):
+    @staticmethod
+    def appliesToHand(hand):
         if not MostlyConcealed.appliesToHand(hand):
             return False
-        if not self.maybeCallingOrWon(hand):
+        if not SevenPairs.maybeCallingOrWon(hand):
+            # Making this static and using another static function
+            # here helps with the “No dragon/wind pair points for
+            # Seven Pairs” rule. See there.
             return False
         melds = hand.melds
         if len(melds) != 7:

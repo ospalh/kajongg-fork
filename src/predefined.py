@@ -637,11 +637,24 @@ Hand with three pungs/kongs of winds and a pair of . (Shou suushi)''')))
                 description=m18n(u'''\
 Hand with three pungs/kongs of winds. Double yakuman. \
 (Dai suushi)''')))
-        # Here we should add the waiting pattern rules.
-        # and the 2 open(!) pinfu and tsumo points.
-        # self.winnerRules.add(Rule(
-        #         'Last Tile Completes Pair of 2..8',
-        #         'FLastTileCompletesPairMinor', points=2))
+
+        # The waiting pattern, open(!) pinfu and tsumo points.
+        self.winnerRules.add(Rule(
+                'Single wait', 'FSingleWait', points=2, description=m18n(u'''\
+Last tile completes the pair. Not applied for seven pairs. \
+Not allowed for concealed pinfu.''')))
+        self.winnerRules.add(Rule(
+                'Edge wait', 'FEdgeWait', points=2, description=m18n(u'''\
+Last tile is a 3, completing a 1-2-3 chow or a 7, completing a 7-8-9 chow. \
+Not allowed for concealed pinfu.''')))
+        self.winnerRules.add(Rule(
+                'Closed wait', 'FClosedWait', points=2, description=m18n(u'''\
+Last tile completes the middle of a chow, e.g. having 4 and 6 on the hand and \
+drawing or claiming a 5. Not allowed for concealed pinfu''')))
+
+        self.winnerRules.add(Rule(
+                'Tsumo', 'FSelfDraw', points=2, description=m18n(u'''\
+Self-drawn last tile. Not applied for concealed pinfu.''')))
 
         # Points for the hand.
         # First the yaku melds
