@@ -475,58 +475,54 @@ any one extra tile in the same suit. (Chuuren pooto)''')))
 
         # The list of yaku, from 1 to 13.
         # One yaku (Some are two yaku when concealed.)
-        # self.winnerRules.add(
-        #     Rule('Riichi', 'FRiichi', doubles=1,
-        #          description=m18n(u'''\
+        # self.winnerRules.add(Rule(
+        #         'Riichi', 'FRiichi', doubles=1, description=m18n(u'''\
 # Concealed waiting hand declared at 1000 points stake. (Riichi)''')))
         self.winnerRules.add(Rule(
                 'Fully concelaned hand', 'FOnlyConcealedMelds', doubles=1,
                 description=m18n(
                     u'Selfdraw on a concealed hand (Menzen tsumo)')))
-
-        self.winnerRules.add(
-            Rule('All simples', 'FAllSimples', doubles=1,
-                 description=m18n(u'''\
+        self.winnerRules.add(Rule(
+                'All simples', 'FAllSimples', doubles=1, description=m18n(u'''\
 Concealed hand with no terminals and honours. (Tanyao chuu)''')))
-        # self.winnerRules.add(
-        #     Rule('Pinfu', 'FPinfu||Ono_other_points', doubles=1
-        #          description=m18n(
-        #             ' Concealed all chows hand with a valueless pair.')))
+        # self.winnerRules.add(Rule(
+        #         'Pinfu', 'FPinfu||Ono_other_points', doubles=1,
+        #         description=m18n('''\
+# Concealed all chows hand with a valueless pair.''')))
         # N.B.: the appliesToHand and Candidate functions must
         # implement the two-sided wait condition.
 
-        self.winnerRules.add(
-            Rule('Pure double chow', 'FPureDoubleChow', doubles=1,
-                  description=m18n(u'''\
+        self.winnerRules.add(Rule(
+                'Pure double chow', 'FPureDoubleChow', doubles=1,
+                description=m18n(u'''\
 Concealed hand with two completely identical chows, i.e. the same \
 values in the same suit. (Iipeikou) ''')))
-        self.winnerRules.add(
-            Rule('Mixed triple chow', 'FTripleChow', doubles=1,
-                 description=m18n(u'''\
+        self.winnerRules.add(Rule(
+                'Mixed triple chow', 'FTripleChow', doubles=1,
+                description=m18n(u'''\
 Hand with three chows of the same numerical sequence, one in each \
 suit.  (San shoku doujun) ''')))
-        self.winnerRules.add(
-             Rule('Concealed mixed triple chow bonus', 'FTripleChowBonus',
-                  doubles=1, description=m18n(u'''\
+        self.winnerRules.add(Rule(
+                'Concealed mixed triple chow bonus', 'FTripleChowBonus',
+                doubles=1, description=m18n(u'''\
 Bonus yaku for a mixed triple chow hand being concealed. \
 (San shoku doujun)''')))
-        self.winnerRules.add(
-            Rule('Pure straight', 'FPureStraight', doubles=1,
-                 description=u'''\
+        self.winnerRules.add(Rule(
+                'Pure straight', 'FPureStraight', doubles=1, description=u'''\
 Hand with three consecutive chows in the same suit. (Itsu)'''))
-        self.winnerRules.add(
-             Rule('Concealed pure straight bonus', 'FPureStraightBonus',
-                  doubles=1, description=m18n(u'''\
+        self.winnerRules.add(Rule(
+                'Concealed pure straight bonus', 'FPureStraightBonus',
+                doubles=1, description=m18n(u'''\
 Bonus yaku for a pure straight hand being concealed. \
 (Itsu)''')))
-        # self.winnerRules.add(
-        #     Rule('Open outside hand', 'FOutsideHand', doubles=1,
-        #     description=m18n('''\
+        # self.winnerRules.add(Rule(
+        #        'Outside hand', 'FOutsideHand', doubles=1,
+        #        description=m18n('''\
 # All sets contain terminals or honours, and the pair is \
 # terminals or honours. The hand contains at least one chow. (Chanta)''')))
-        # self.winnerRules.add(
-        #     Rule('Concealend outside hand bonus', 'FOutsideHandBonus',
-        #    doubles=1, description=m18n('''\
+        # self.winnerRules.add(Rule(
+        #         'Concealed Outside hand bonus', 'FOutsideHandBonus',
+        #         doubles=1, description=m18n(u'''\
 # Bonus yaku for an outside hand being concealed. (Chanta)''')))
 
         # Four more one-yake are in addManualRules(), as you can’t
@@ -544,9 +540,8 @@ Bonus yaku for a pure straight hand being concealed. \
                 description=m18n(u'''\
 The doubles for winning with seven pairs. See also Mah-jongg rules.''')))
 
-        # self.winnerRules.add(
-        #     Rule('Triple pung', 'FTriplePung', doubles=2,
-        #          description=u'''\
+        # self.winnerRules.add(Rule(
+        #        'Triple pung', 'FTriplePung', doubles=2, description=u'''\
 # Hand with three pungs/kongs, one in each suit, of the same
 # number. (San shoku dokou)'''))
         self.winnerRules.add(Rule(
@@ -561,9 +556,9 @@ Hand with four pungs/kongs and a pair. (Toi-toi hou)'''))
                 description=m18n('''\
 Hand with tiles from only one of the three suits, in combination with \
 honours. (Honitsu) ''')))
-        self.winnerRules.add(
-            Rule('Concealed half flush bonus', 'FHalfFlushBonus',
-                 doubles=1, description=m18n('''\
+        self.winnerRules.add(Rule(
+                'Concealed half flush bonus', 'FHalfFlushBonus', doubles=1,
+                description=m18n('''\
 Bonus yaku for a half flush hand being concealed. (Honitsu) ''')))
         self.handRules.add(Rule(
                 'Little three dragons', 'FLittleThreeDragons', doubles=2,
@@ -573,9 +568,9 @@ Hand with two dragon pungs/kongs and a pair of dragons. (Shou sangen)''')))
                 'All terminals and honours', 'FOnlyMajors', doubles=2,
                  description=m18n(u'''\
 Hand containing only terminals and honours. (Honroutou)''')))
-        # self.winnerRules.add(
-        #     Rule('Terminals in all sets', 'FOnlyMajors', doubles=2,
-        #          description=m18n(u'''\
+        # self.winnerRules.add(Rule(
+        #         'Terminals in all sets', 'FOnlyMajors', doubles=2,
+        #        description=m18n(u'''\
 # Hand containing only terminals and honours. (Honroutou)''')))
 
         # Three yaku
@@ -593,9 +588,9 @@ Chows (Ryan peikou)''')))
                 description=m18n('''\
 Hand composed entirely of tiles from only one of the three suits. No \
 honours allowed. (Chinitsu)''')))
-        self.winnerRules.add(
-            Rule('Concealed full flush bonus', 'FFullFlushBonus',
-                 doubles=1, description=m18n('''\
+        self.winnerRules.add(Rule(
+                'Concealed full flush bonus', 'FFullFlushBonus', doubles=1,
+                description=m18n('''\
 Bonus yaku for a full flush hand being concealed. (Chinitsu)''')))
 
         # Nagashi mangan is dealt with during scoring. Maybe we can
@@ -643,9 +638,9 @@ Hand with three pungs/kongs of winds. Double yakuman. \
 (Dai suushi)''')))
         # Here we should add the waiting pattern rules.
         # and the 2 open(!) pinfu and tsumo points.
-        # self.winnerRules.add(
-        #     Rule('Last Tile Completes Pair of 2..8',
-        #          'FLastTileCompletesPairMinor', points=2))
+        # self.winnerRules.add(Rule(
+        #         'Last Tile Completes Pair of 2..8',
+        #         'FLastTileCompletesPairMinor', points=2))
 
         # Points for the hand.
         # First the yaku melds
@@ -661,37 +656,37 @@ Hand with three pungs/kongs of winds. Double yakuman. \
                 description=m18n(
                     u'Pung/kong of the seat wind (Fanpai)')))
         # And the non-yaku melds
-        self.meldRules.add(
-            Rule('Open kong, 2..8', 'FExposedMinorKong', points=8))
-        self.meldRules.add(
-            Rule('Open kong, terminals', 'FExposedTerminalsKong', points=16))
-        self.meldRules.add(
-            Rule('Open kong, honours', 'FExposedHonorsKong', points=16))
-        self.meldRules.add(
-            Rule('Open pung, 2..8', 'FExposedMinorPung', points=2))
-        self.meldRules.add(
-            Rule('Open pung, terminals', 'FExposedTerminalsPung', points=4))
-        self.meldRules.add(
-            Rule('Open pung, honours', 'FExposedHonorsPung', points=4))
+        self.meldRules.add(Rule(
+                'Open kong, 2..8', 'FExposedMinorKong', points=8))
+        self.meldRules.add(Rule(
+                'Open kong, terminals', 'FExposedTerminalsKong', points=16))
+        self.meldRules.add(Rule(
+                'Open kong, honours', 'FExposedHonorsKong', points=16))
+        self.meldRules.add(Rule(
+                'Open pung, 2..8', 'FExposedMinorPung', points=2))
+        self.meldRules.add(Rule(
+                'Open pung, terminals', 'FExposedTerminalsPung', points=4))
+        self.meldRules.add(Rule(
+                'Open pung, honours', 'FExposedHonorsPung', points=4))
         # Concealed melds:
-        self.meldRules.add(
-            Rule('Concealed kong, 2..8', 'FConcealedMinorKong', points=16))
+        self.meldRules.add(Rule(
+                'Concealed kong, 2..8', 'FConcealedMinorKong', points=16))
         self.meldRules.add(Rule(
                 'Concealed kong, terminals', 'FConcealedTerminalsKong',
                 points=32))
-        self.meldRules.add(
-            Rule('Concealed kong, honours', 'FConcealedHonorsKong', points=32))
-        self.meldRules.add(
-            Rule('Concealed pung, 2..8', 'FConcealedMinorPung', points=4))
+        self.meldRules.add(Rule(
+                'Concealed kong, honours', 'FConcealedHonorsKong', points=32))
+        self.meldRules.add(Rule(
+                'Concealed pung, 2..8', 'FConcealedMinorPung', points=4))
         self.meldRules.add(Rule(
                 'Concealed pung, terminals', 'FConcealedTerminalsPung',
                 points=8))
-        self.meldRules.add(
-            Rule('Concealed pung, honours', 'FConcealedHonorsPung', points=8))
-        self.meldRules.add(
-            Rule('Pair of seat wind', 'FOwnWindPair', points=2))
-        self.meldRules.add(
-            Rule('Pair of prevailing wind', 'FRoundWindPair', points=2))
+        self.meldRules.add(Rule(
+                'Concealed pung, honours', 'FConcealedHonorsPung', points=8))
+        self.meldRules.add(Rule(
+                'Pair of seat wind', 'FOwnWindPair', points=2))
+        self.meldRules.add(Rule(
+                'Pair of prevailing wind', 'FRoundWindPair', points=2))
         self.meldRules.add(Rule('Pair of dragons', 'FDragonPair', points=2))
 
     def addParameterRules(self):
@@ -727,8 +722,8 @@ The points for a mangan or five fan (doubles) hand. Higher limits \
                 'intminMJDoubles||OMandatory', parameter=0))
         # This should be 1. Until we have riichi declaration up and
         # running, use 0 instead.
-        self.parameterRules.add(
-            Rule('Claim Timeout', 'intclaimTimeout||Omandatory', parameter=5))
+        self.parameterRules.add(Rule(
+                'Claim Timeout', 'intclaimTimeout||Omandatory', parameter=5))
         # The EMA rules say 3s. May be too quick for beginners.
         self.parameterRules.add(Rule(
                 'Play with Bonus Tiles',
