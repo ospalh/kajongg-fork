@@ -127,18 +127,21 @@ class OwnWindPungKong(Function):
         return len(meld) >= 3 and meld.pairs[0].lower() == 'w' + hand.ownWind
 
 class OwnWindPair(Function):
-    @staticmethod
-    def appliesToMeld(hand, meld):
+    def appliesToMeld(self, hand, meld):
+        if 'not_7pairs' in self.options and SevenPairs.appliesToHand(hand):
+            return False
         return len(meld) == 2 and meld.pairs[0].lower() == 'w' + hand.ownWind
 
 class RoundWindPair(Function):
-    @staticmethod
-    def appliesToMeld(hand, meld):
+    def appliesToMeld(self, hand, meld):
+        if 'not_7pairs' in self.options and SevenPairs.appliesToHand(hand):
+            return False
         return len(meld) == 2 and meld.pairs[0].lower() == 'w' + hand.roundWind
 
 class DragonPair(Function):
-    @staticmethod
-    def appliesToMeld(dummyHand, meld):
+    def appliesToMeld(self, hand, meld):
+        if 'not_7pairs' in self.options and SevenPairs.appliesToHand(hand):
+            return False
         return len(meld) == 2 and meld.pairs[0][0].lower() == 'd'
 
 class LastTileCompletesPairMinor(Function):

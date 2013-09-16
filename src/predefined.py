@@ -685,10 +685,12 @@ Hand with three pungs/kongs of winds. Double yakuman. \
         self.meldRules.add(Rule(
                 'Concealed pung, honours', 'FConcealedHonorsPung', points=8))
         self.meldRules.add(Rule(
-                'Pair of seat wind', 'FOwnWindPair', points=2))
+                'Pair of seat wind', 'FOwnWindPair||Onot_7pairs', points=2))
         self.meldRules.add(Rule(
-                'Pair of prevailing wind', 'FRoundWindPair', points=2))
-        self.meldRules.add(Rule('Pair of dragons', 'FDragonPair', points=2))
+                'Pair of prevailing wind', 'FRoundWindPair||Onot_7pairs',
+                points=2))
+        self.meldRules.add(Rule(
+                'Pair of dragons', 'FDragonPair||Onot_7pairs', points=2))
 
     def addParameterRules(self):
         u"""
