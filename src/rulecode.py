@@ -1299,6 +1299,12 @@ class GatesOfHeaven(Function):
         if len(suits) != 1 or not suits < set('sbc'):
             return False
         self.suit = suits.pop()
+        # I don’t actually see how these rules make sure the hand is
+        # mostly cocealed. Looks like claiming a few chows should
+        # return True here. Make sure it works correctly for Riichi.
+        if 'Japanese' in self.options \
+                and not MostlyConcealed.appliesToHand(hand):
+            return False
         for meld in hand.declaredMelds:
             if meld.isPung():
                 return False

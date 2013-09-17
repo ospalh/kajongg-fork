@@ -464,7 +464,7 @@ The points for winning with seven pairs. See also winner rules.''')))
 Concealed hand with one of each of the 13 different terminal and honour tiles \
 plus one extra terminal or honour tile. (Kokushi musou)''')))
         self.mjRules.add(Rule(
-                'Nine Gates', 'FGatesOfHeaven||OlastExtra', limits=1,
+                'Nine Gates', 'FGatesOfHeaven||OJapanese', limits=1,
                 description=m18n('''\
 Concealed hand consisting of the tiles 1112345678999 in the same suit plus \
 any one extra tile in the same suit. (Chuuren pooto)''')))
