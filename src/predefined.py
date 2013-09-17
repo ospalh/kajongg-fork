@@ -485,13 +485,11 @@ any one extra tile in the same suit. (Chuuren pooto)''')))
         self.winnerRules.add(Rule(
                 'All simples', 'FAllSimples', doubles=1, description=m18n(u'''\
 Concealed hand with no terminals and honours. (Tanyao chuu)''')))
-        # self.winnerRules.add(Rule(
-        #         'Concealend pinfu', 'FConcealedPinfu', doubles=1,
-        #         description=m18n('''\
-# Concealed all chows hand with a valueless pair. Must finish on \
-# a two-sided wait.''')))
-        # N.B.: the appliesToHand and Candidate functions must
-        # implement the two-sided wait condition.
+        self.winnerRules.add(Rule(
+                'Concealend pinfu', 'FConcealedPinfu', doubles=1,
+                 description=m18n('''\
+Concealed all chows hand with a valueless pair. Must finish on \
+a two-sided wait.''')))
 
         self.winnerRules.add(Rule(
                 'Pure double chow', 'FPureDoubleChow', doubles=1,
@@ -651,7 +649,6 @@ Not allowed for concealed pinfu.''')))
                 'Closed wait', 'FClosedWait', points=2, description=m18n(u'''\
 Last tile completes the middle of a chow, e.g. having 4 and 6 on the hand and \
 drawing or claiming a 5. Not allowed for concealed pinfu''')))
-
         self.winnerRules.add(Rule(
                 'Tsumo', 'FSelfDraw', points=2, description=m18n(u'''\
 Self-drawn last tile. Not applied for concealed pinfu.''')))

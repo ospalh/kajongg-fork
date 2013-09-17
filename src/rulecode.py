@@ -239,19 +239,21 @@ class ConcealedPinfu(Function):
     u"""
     Concealend pinfu.
 
-    Concealed all chows hand with a valueless pair.
-
-    TODO: The winning tile is required to finish a chow with a
-    two-sided wait.
+    Concealed all chows hand with a valueless pair.  You have to
+    finish on a two-sided chow wit, which is equivalent to not
+    allowing hands that get the points for waits.
     """
     @staticmethod
     def appliesToHand(hand):
         if not MostlyConcealed.appliesToHand(hand):
             return False
-        # The wait rule might be implemented by checking that none of
-        # the waiting points rules applies. That might actually be in
-        # the ZeroPointHand definition alreandy. Btw. we ignore
-        # flowers here.
+        if ClosedWait.appliesToHand(hand) or EdgeWait.appliesToHand(hand) \
+                or SingleWait.appliesToHand(hand):
+            # What remains in the end (when hands with pungs are
+            # eliminated in the next step) should be finishing on a
+            # two-sided wait.
+            return False
+        # We ignore bonus tiles.
         return not any(x.meld for x in hand.usedRules if x.meld)
 
 
