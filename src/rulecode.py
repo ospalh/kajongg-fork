@@ -178,7 +178,6 @@ class EdgeWait(Function):
         if not hand.lastMeld or not hand.lastMeld.isChow():
             return False
         lm_n = [pair[1] for pair in hand.lastMeld.pairs]
-        print('edge wait? lm_n = {}'.format(lm_n))
         return (lm_n[2] == '3' and hand.lastTile[1] == '3') \
             or (lm_n[0] == '7' and hand.lastTile[1] == '7')
 
@@ -189,7 +188,6 @@ class ClosedWait(Function):
     def appliesToHand(hand):
         if not hand.lastMeld or not hand.lastMeld.isChow():
             return False
-        print('closed wait? lmp1 = {}, lt'.format(hand.lastMeld.pairs[1], hand.lastTile[1]))
         return hand.lastMeld.pairs[1][1] == hand.lastTile[1]
 
 
