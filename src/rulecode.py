@@ -865,18 +865,11 @@ class SevenPairs(Function):
     def appliesToHand(hand):
         if not MostlyConcealed.appliesToHand(hand):
             return False
-        if not SevenPairs.maybeCallingOrWon(hand):
-            # Making this static and using another static function
-            # here helps with the “No dragon/wind pair points for
-            # Seven Pairs” rule. See there.
-            return False
-        melds = hand.melds
-        if len(melds) != 7:
-            return False
-        for meld in melds:
-            if not meld.isPair():
-                return False
-        return True  # No meld that is not a pair
+        # We actually just test for “all pairs”. It will not work when
+        # playing with bonus tiles. I guess those could be excluded
+        # when constructing the Counter.
+        return all(itm[1] == 2 for itm in Counter(
+                tile.lower() for tile in hand.tileNames).items())
 
     def winningTileCandidates(self, hand):
         if not self.maybeCallingOrWon(hand):
