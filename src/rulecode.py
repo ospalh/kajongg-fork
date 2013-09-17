@@ -1489,7 +1489,7 @@ class ThreeConcealedPungsOrKongs(Function):
 
     A hand with three concealend pungs or kongs. The difference to
     ThreeConcealedPongs is that for this claimed kongs (i.e. kongs
-    that started out as hidden pungs do not count.) Also, we have an
+    that started out as hidden pungs) do not count. Also, we have an
     extra yakuman hand for four concealed pungs or kongs.
     """
     @staticmethod
@@ -1505,8 +1505,8 @@ class FourConcealedPungsOrKongs(Function):
 
     A hand with four concealend pungs or kongs. The difference to
     ThreeConcealedPongs is that for this claimed kongs (i.e. kongs
-    that started out as hidden pungs do not count.) And of course that
-    it have to be four.
+    that started out as hidden pungs) do not count. And of course that
+    it has to be four.
     """
     @staticmethod
     def appliesToHand(hand):
