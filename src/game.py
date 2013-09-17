@@ -111,6 +111,14 @@ class Game(object):
         self.shouldSave = shouldSave
         self.setHandSeed()
         self.activePlayer = None
+        self.double_riichi_chance = True
+        # For Japanese play, declaring riichi in the first
+        # *uniterrupted* set of turns gives an extra yaku. A similar
+        # condition applies to Blessing of Earth and Blessing of
+        # Man. Keep track of that.
+        self.repeat_counter = 0
+        # For Japanese play, count East wins and draws.  This adds
+        # points to the hand value.
         self.__winner = None
         self.__currentHandId = None
         self.__prevHandId = None
@@ -494,6 +502,30 @@ class Game(object):
         if InternalParameters.field:
             InternalParameters.field.prepareHand()
         self.setHandSeed()
+
+    def nixChances(self, nix_for=None):
+        u"""
+        Record that chances for some extra yaku are gone.
+
+        Record that the chances for blessing of earth, blessing of
+        man, double riichi or ippatsu is gone.  This should be called
+        without argument on all claims of tiles and declarations of
+        hidden kongs. At the end of the first round, when East draws
+        the first tile after the start, it should be called with
+        this game object(*), and only the double riichi and blessing-of
+        chances are gone. One round after a player declared riichi, it
+        should be called with the player object, to record that the
+        ippatsu chance is gone.
+        """
+        # (*) After all we do duck typing and call-by-object-reference,
+        # so there is no reason not to say something like
+        # “self.nixChances(self)”.
+
+        if not nix_for or self is nix_for:
+            self.double_riichi_chance = False
+        for player in self.players:
+            if not nix_for or player is nix_for:
+                player.ippatsu_chance = False
 
     def hidePopups(self):
         """hide all popup messages"""
