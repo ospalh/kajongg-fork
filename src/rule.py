@@ -207,7 +207,8 @@ class Score(object):
         if self.doubles >= 8:
             return self.ruleset.limit * BAIMAN_FACTOR
         if self.doubles >= 6:
-            return self.ruleset.limit * HANEMAN_FACTOR
+            return int(self.ruleset.limit * HANEMAN_FACTOR)
+            # The factor is 1.5, so do explicit cast back to int.
         if self.doubles >= 5:
             return self.ruleset.limit
         # Four or less han/doubles. Actually look at the points. And
