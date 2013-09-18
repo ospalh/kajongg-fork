@@ -354,6 +354,32 @@ class OnlyHonors(Function):
     def appliesToHand(hand):
         return not set(hand.values) - set('grbeswn')
 
+
+class OutsideHand(Function):
+    u"""
+    Outside Hand
+
+    A hand where all sets, including the pair, contain terminals or
+    honours, and also a chow.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+
+        def majorInMeld(meld):
+            return meld.pairs[0][1] in 'grbeswn19' \
+                or (meld.isChow() and meld.pairs[2][1] == '9')
+        melds = hand.melds
+        return any(meld.isChow() for meld in melds) \
+            and all(majorInMeld(meld) for meld in melds)
+
+
+class OutsideHandBonus(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        return MostlyConcealed.appliesToHand(hand) \
+            and OutsideHand.appliesToHand(hand)
+
+
 class HiddenTreasure(Function):
     @staticmethod
     def appliesToHand(hand):

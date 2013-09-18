@@ -514,15 +514,15 @@ Hand with three consecutive chows in the same suit. (Itsu)'''))
                 doubles=1, description=m18n(u'''\
 Bonus yaku for a pure straight hand being concealed. \
 (Itsu)''')))
-        # self.winnerRules.add(Rule(
-        #        'Outside hand', 'FOutsideHand', doubles=1,
-        #        description=m18n('''\
-# All sets contain terminals or honours, and the pair is \
-# terminals or honours. The hand contains at least one chow. (Chanta)''')))
-        # self.winnerRules.add(Rule(
-        #         'Concealed Outside hand bonus', 'FOutsideHandBonus',
-        #         doubles=1, description=m18n(u'''\
-# Bonus yaku for an outside hand being concealed. (Chanta)''')))
+        self.winnerRules.add(Rule(
+                'Outside hand', 'FOutsideHand', doubles=1,
+                description=m18n('''\
+All sets contain terminals or honours, and the pair is \
+terminals or honours. The hand contains at least one chow. (Chanta)''')))
+        self.winnerRules.add(Rule(
+                'Concealed Outside hand bonus', 'FOutsideHandBonus',
+                doubles=1, description=m18n(u'''\
+Bonus yaku for an outside hand being concealed. (Chanta)''')))
 
         # Four more one-yake are in addManualRules(), as you can’t
         # recoginze them from just the tiles:
