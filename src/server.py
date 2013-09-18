@@ -423,6 +423,11 @@ class ServerTable(Table):
         if requests and requests[0].answer == Message.MahJongg:
             requests[0].answer.serverAction(self, requests[0])
         else:
+            # Like exposing a chow or pung, *successfully* exposing a
+            # kong also nixes chances for Blessing of Earth, Blessing
+            # of Man, double riichi and ippatsu. When we got here we
+            # finally know that it didn’t get robbed.
+            self.game.nixChances()
             self.pickTile(requests, deadEnd=True)
 
     def clientDiscarded(self, msg):
@@ -605,6 +610,12 @@ class ServerTable(Table):
         if claim == Message.Kong:
             block.callback(self.pickKongReplacement)
         else:
+            # If we *successfully* expose a meld, that nixes chances
+            # for Blessing of Earth, Blessing of Man, double riichi
+            # and ippatsu. Trying to claim a kong that then gets
+            # robbed, the exposure is not a successful. See below for
+            # that case.
+            self.game.nixChances()
             block.callback(self.moved)
 
     def declareKong(self, player, meldTiles):

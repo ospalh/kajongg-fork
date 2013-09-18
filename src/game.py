@@ -522,6 +522,8 @@ class Game(object):
         # “self.nixChances(self)”.
 
         if not nix_for or self is nix_for:
+            if (self.double_riichi_chance):
+                print('Debug: No double riichi any more!')
             self.double_riichi_chance = False
         for player in self.players:
             if not nix_for or player is nix_for:
@@ -1024,6 +1026,15 @@ class RemoteGame(PlayingGame):
         # Chinese dangerous play).
         self.discardedTiles[tileName.lower()] += 1
         player.discarded.append(tileName)
+        if player.wind == 'n':
+            # North is the last player in a round. When north has
+            # discarded, the first uninterrupted turn is surely over.
+            self.nixChances(self)
+        # Nixing the ippatsu chance for a player i a bit tricky. We
+        # have to call this the time *after* ey discards the riichi
+        # declaration tile itself. Hmm.
+        # if player.ippatsu_chance:
+        #     self.nixChances(player)
         concealedTileName = self.__concealedTileName(tileName) # has side effect, needs to be called
         if InternalParameters.field:
             if player.handBoard.focusTile and player.handBoard.focusTile.element == tileName:
