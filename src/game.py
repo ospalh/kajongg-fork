@@ -1026,7 +1026,7 @@ class RemoteGame(PlayingGame):
         # Chinese dangerous play).
         self.discardedTiles[tileName.lower()] += 1
         player.discarded.append(tileName)
-        if player.wind == 'n':
+        if player.wind == 'N':
             # North is the last player in a round. When north has
             # discarded, the first uninterrupted turn is surely over.
             self.nixChances(self)
