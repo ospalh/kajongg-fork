@@ -566,13 +566,18 @@ Hand with two dragon pungs/kongs and a pair of dragons. (Shou sangen)''')))
                 'All terminals and honours', 'FOnlyMajors', doubles=2,
                  description=m18n(u'''\
 Hand containing only terminals and honours. (Honroutou)''')))
-        # self.winnerRules.add(Rule(
-        #         'Terminals in all sets', 'FOnlyMajors', doubles=2,
-        #        description=m18n(u'''\
-# Hand containing only terminals and honours. (Honroutou)''')))
+        self.winnerRules.add(Rule(
+                'Terminals in all sets', 'FTerminalsInAll', doubles=2,
+                description=m18n(u'''\
+All sets contain terminals, and the pair is terminals. Hand contains a chow. \
+(Junchan)''')))
+        self.winnerRules.add(Rule(
+                'Terminals in all sets bonus', 'FTerminalsInAllBonus',
+                doubles=1, description=m18n('''\
+Bonus yaku for a terminals in all sets hand being concealed. (Junchan) ''')))
+
 
         # Three yaku
-
         self.winnerRules.add(Rule(
                 'Twice pure double chows', 'FTwicePureDoubleChow',
                 doubles=3, description=m18n(u'''\

@@ -360,7 +360,7 @@ class OutsideHand(Function):
     Outside Hand
 
     A hand where all sets, including the pair, contain terminals or
-    honours, and also a chow.
+    honours, and where at least one set is a chow.
     """
     @staticmethod
     def appliesToHand(hand):
@@ -378,6 +378,31 @@ class OutsideHandBonus(Function):
     def appliesToHand(hand):
         return MostlyConcealed.appliesToHand(hand) \
             and OutsideHand.appliesToHand(hand)
+
+
+class TerminalsInAll(Function):
+    u"""
+    Terminals in All Sets
+
+    A hand where all sets, including the pair, contain terminals, and
+    where at least one set is a chow.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+
+        def terminalInMeld(meld):
+            return meld.pairs[0][1] in '19' \
+                or (meld.isChow() and meld.pairs[2][1] == '9')
+        melds = hand.melds
+        return any(meld.isChow() for meld in melds) \
+            and all(terminalInMeld(meld) for meld in melds)
+
+
+class TerminalsInAllBonus(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        return MostlyConcealed.appliesToHand(hand) \
+            and TerminalsInAll.appliesToHand(hand)
 
 
 class HiddenTreasure(Function):
