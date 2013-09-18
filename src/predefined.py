@@ -531,18 +531,17 @@ Bonus yaku for a pure straight hand being concealed. \
         # * Under the sea, ron
         # * Under the sea, tsumo
 
-        # Two yaku hands:
-        # Seven pairs is at mjRules above, too.
+        # Two yaku hands: Seven pairs is at mjRules above, too. (It
+        # may also be a one-yaku hand. See the Kanto rules below.)
 
         self.winnerRules.add(Rule(
                 'Seven pairs yaku', 'FSevenPairs', doubles=2,
                 description=m18n(u'''\
 The doubles for winning with seven pairs. See also Mah-jongg rules.''')))
-
-        # self.winnerRules.add(Rule(
-        #        'Triple pung', 'FTriplePung', doubles=2, description=u'''\
-# Hand with three pungs/kongs, one in each suit, of the same
-# number. (San shoku dokou)'''))
+        self.winnerRules.add(Rule(
+                'Triple pung', 'FTriplePung', doubles=2, description=u'''\
+Hand with three pungs/kongs, one in each suit, of the same
+number. (San shoku dokou)'''))
         self.winnerRules.add(Rule(
                 'Three concealend pungs', 'FThreeConcealedPungsOrKongs',
                 doubles=2, description=m18n(u'''\

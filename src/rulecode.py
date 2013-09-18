@@ -781,6 +781,14 @@ class TwicePureDoubleChow(Function):
 
 
 class TripleChow(Function):
+    u"""
+    Three chows with the same numbers, one in each suit.
+
+    Three chows with the same numbers, one in each suit. The code
+    assumes that there are at most four chows. To combine this with
+    16-tile game (https://bugs.kde.org/show_bug.cgi?id=254918), this
+    needs to be re-written.
+    """
     @staticmethod
     def appliesToHand(hand):
         chow_start_tiles = [meld.pairs[0].lower() for meld in hand.melds
@@ -801,6 +809,28 @@ class TripleChowBonus(Function):
     def appliesToHand(hand):
         return MostlyConcealed.appliesToHand(hand) \
             and TripleChow.appliesToHand(hand)
+
+
+class TriplePung(Function):
+    u"""
+    Three pungs with the same numbers, one in each suit.
+
+    Three pungs with the same numbers, one in each suit. See
+    limitation for Triple Chow above.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        pung_start_tiles = [meld.pairs[0].lower() for meld in hand.melds
+                            if meld.isPungOrKong()]
+        try:
+            (most_common_pung, ) = Counter(
+                [cst[1] for cst in pung_start_tiles]).most_common(1)
+        except (ValueError, IndexError):
+            # No pung, so none is most_common.
+            return False
+        return 'b' + most_common_pung[0] in pung_start_tiles \
+            and 'c' + most_common_pung[0] in pung_start_tiles \
+            and 's' + most_common_pung[0] in pung_start_tiles
 
 
 class PureStraight(Function):
