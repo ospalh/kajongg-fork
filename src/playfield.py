@@ -779,7 +779,7 @@ class PlayField(KXmlGuiWindow):
             else:
                 self.newGame()
             if self.game:
-                self.game.throwDices()
+                self.game.throwDice()
         gameSelector.close()
         self.updateGUI()
         return bool(self.game)
