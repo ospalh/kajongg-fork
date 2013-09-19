@@ -146,7 +146,6 @@ class UIWall(Wall):
     def build(self):
         """builds the wall without dividing"""
         # recycle used tiles
-        print('preparing wall')
         for tile in self.tiles:
             tile.element = 'Xy'
             tile.dark = True
