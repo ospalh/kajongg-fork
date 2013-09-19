@@ -863,10 +863,11 @@ class Game(object):
         # the break wall are E: 22.2% (8 out of 36), S: 25%, W: 27.7%
         # (10 out of 36), N: 25%.
         sideLength = len(self.wall.tiles) // 4
-        # Add two more throws
-        self.dice += [
-            self.randomGenerator.randrange(1, 7),
-            self.randomGenerator.randrange(1, 7)]
+        if self.ruleset.basicStyle != Ruleset.Japanese:
+            # Add two more throws, but not for Japanese games.
+            self.dice += [
+                self.randomGenerator.randrange(1, 7),
+                self.randomGenerator.randrange(1, 7)]
         # Determine the break point. Count stacks of two each, not
         # single tiles.
         self.divideAt = breakWall * sideLength + 2 * sum(self.dice)
