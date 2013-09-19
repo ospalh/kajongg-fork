@@ -125,6 +125,7 @@ class Game(object):
         self.visibleTiles = IntDict()
         self.discardedTiles = IntDict(self.visibleTiles) # tile names are always lowercase
         self.eastMJCount = 0
+        self.dice = []  # So some fancy graphics can show the throws
         self.dangerousTiles = list()
         self.csvTags = []
         self.setGameId()
@@ -737,19 +738,44 @@ class Game(object):
                 yield move
 
     def throwDice(self):
-        """sets random living and kongBox
-        sets divideAt: an index for the wall break"""
+        u"""
+        Determine the place where to break the wall.
+
+        Sets self.divideAt, the point where the wall is broken, based
+        on four random values in the range of 1–6, a.k.a dice throws.
+        For the instance belonging to the game server, this is also
+        where we shuffle the tiles in the wall.
+        """
         if self.belongsToGameServer():
             self.wall.tiles.sort(key=tileKey)
             self.randomGenerator.shuffle(self.wall.tiles)
-        breakWall = self.randomGenerator.randrange(4)
+        # Do it by the book. Use the first two dice to determine the
+        # wall segment to use.  Clear the dice list from the last game
+        # and add two new.
+        self.dice = [
+            self.randomGenerator.randrange(1, 7),
+            self.randomGenerator.randrange(1, 7)]
+
+        breakWall = (1 - sum(self.dice)) % 4
+        # The 1-sum is a fence post correction and takes into account
+        # that we should take this count counter-clockwise, while the
+        # wall is counted clockwise the rest of the time, incuding
+        # determining the break point in the step below.
+        # Btw, the way the break wall is determined, the chances for
+        # the break wall are E: 22.2% (8 out of 36), S: 25%, W: 27.7%
+        # (10 out of 36), N: 25%.
         sideLength = len(self.wall.tiles) // 4
-        # use the sum of four dice to find the divide
-        self.divideAt = breakWall * sideLength + \
-            sum(self.randomGenerator.randrange(1, 7) for idx in range(4))
-        if self.divideAt % 2 == 1:
-            self.divideAt -= 1
+        # Add two more throws
+        self.dice += [
+            self.randomGenerator.randrange(1, 7),
+            self.randomGenerator.randrange(1, 7)]
+        # Determine the break point. Count stacks of two each, not
+        # single tiles.
+        self.divideAt = breakWall * sideLength + 2 * sum(self.dice)
+        # Wrap around at the end.
         self.divideAt %= len(self.wall.tiles)
+        # print('Throws: {}, sum: {} Break wall: {}'.format(
+        #         self.dice, sum(self.dice), breakWall))
 
     def dangerousFor(self, forPlayer, tile):
         """returns a list of explaining texts if discarding tile
