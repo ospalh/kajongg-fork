@@ -152,6 +152,7 @@ class Player(object):
         self.usedDangerousFrom = None
         self.isCalling = False
         self.__hand = None
+        self.ippatsu_chance = False
 
     def invalidateHand(self):
         """some source for the computation of current hand changed"""

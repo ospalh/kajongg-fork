@@ -480,6 +480,7 @@ class Game(object):
     def prepareHand(self):
         """prepares the next hand"""
         del self.moves[:]
+        self.double_riichi_chance = True
         if self.finished():
             if InternalParameters.field and isAlive(InternalParameters.field):
                 InternalParameters.field.updateGUI()
@@ -524,7 +525,7 @@ class Game(object):
 
         if not nix_for or self is nix_for:
             if (self.double_riichi_chance):
-                print('Debug: No double riichi any more!')
+                self.debug('No double riichi any more!')
             self.double_riichi_chance = False
         for player in self.players:
             if not nix_for or player is nix_for:
