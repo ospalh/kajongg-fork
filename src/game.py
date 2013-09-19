@@ -736,7 +736,7 @@ class Game(object):
             else:
                 yield move
 
-    def throwDices(self):
+    def throwDice(self):
         """sets random living and kongBox
         sets divideAt: an index for the wall break"""
         if self.belongsToGameServer():
@@ -744,7 +744,7 @@ class Game(object):
             self.randomGenerator.shuffle(self.wall.tiles)
         breakWall = self.randomGenerator.randrange(4)
         sideLength = len(self.wall.tiles) // 4
-        # use the sum of four dices to find the divide
+        # use the sum of four dice to find the divide
         self.divideAt = breakWall * sideLength + \
             sum(self.randomGenerator.randrange(1, 7) for idx in range(4))
         if self.divideAt % 2 == 1:
@@ -889,7 +889,7 @@ class RemoteGame(PlayingGame):
 
     def initialDeal(self):
         """Happens only on server: every player gets 13 tiles (including east)"""
-        self.throwDices()
+        self.throwDice()
         self.wall.divide()
         for player in self.players:
             player.clearHand()
