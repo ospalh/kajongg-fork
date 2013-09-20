@@ -282,6 +282,19 @@ class OnlyConcealedMelds(Function):
         return not any((x.state == EXPOSED and x.meldType != CLAIMEDKONG) for x in hand.melds)
 
 
+class FullyConcealed(Function):
+    u"""
+    Fully concealed hand.
+
+    Fully concealed hand, Japanese style. Similar to
+    OnlyConcealedMelds, but claimed kongs make the hand open and
+    violate this.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        return not any(x.state == EXPOSED for x in hand.melds)
+
+
 class MostlyConcealed(Function):
     u"""
     A hand that counts as concealed for Japanese rules.

@@ -482,7 +482,7 @@ any one extra tile in the same suit. (Chuuren pooto)''')))
         #         'Riichi', 'FRiichi', doubles=1, description=m18n(u'''\
 # Concealed waiting hand declared at 1000 points stake. (Riichi)''')))
         self.winnerRules.add(Rule(
-                'Fully concelaned hand', 'FOnlyConcealedMelds', doubles=1,
+                'Fully concelaned hand', 'FFullyConcealed', doubles=1,
                 description=m18n(
                     u'Selfdraw on a concealed hand (Menzen tsumo)')))
         self.winnerRules.add(Rule(
@@ -493,7 +493,6 @@ Concealed hand with no terminals and honours. (Tanyao chuu)''')))
                  description=m18n('''\
 Concealed all chows hand with a valueless pair. Must finish on \
 a two-sided wait.''')))
-
         self.winnerRules.add(Rule(
                 'Pure double chow', 'FPureDoubleChow', doubles=1,
                 description=m18n(u'''\
@@ -527,7 +526,7 @@ terminals or honours. The hand contains at least one chow. (Chanta)''')))
                 doubles=1, description=m18n(u'''\
 Bonus yaku for an outside hand being concealed. (Chanta)''')))
 
-        # Four more one-yake are in addManualRules(), as you can’t
+        # Four more one-yaku are in addManualRules(), as you can’t
         # recoginze them from just the tiles:
         # * After a kong
         # * Robbing the kong
@@ -599,8 +598,9 @@ honours allowed. (Chinitsu)''')))
                 description=m18n('''\
 Bonus yaku for a full flush hand being concealed. (Chinitsu)''')))
 
-        # Nagashi mangan is dealt with during scoring. Maybe we can
-        # use the nine east wins as inspiration.
+        # Nagashi mangan is a bit curious. Counts like a win, but is a
+        # loser hand.
+        # self.loserRules.add(Rule('Nagashi mangan', 'FNagashi mangan'...))
 
         # The Yakuman (thirteen yaku) hands
         # Thirteen Orphans and  Nine Gates are at mjRules above.
