@@ -111,14 +111,17 @@ class Game(object):
         self.shouldSave = shouldSave
         self.setHandSeed()
         self.activePlayer = None
-        self.double_riichi_chance = True
         # For Japanese play, declaring riichi in the first
         # *uniterrupted* set of turns gives an extra yaku. A similar
         # condition applies to Blessing of Earth and Blessing of
         # Man. Keep track of that.
-        self.repeat_counter = 0
+        self.double_riichi_chance = True
         # For Japanese play, count East wins and draws.  This adds
         # points to the hand value.
+        self.repeat_counter = 0
+        # With Japanese play, riichi bets can carry over from one hand
+        # to the next on exhaustive draws. Keep track of those.
+        self.riichi_bets = 0
         self.__winner = None
         self.__currentHandId = None
         self.__prevHandId = None
@@ -490,6 +493,7 @@ class Game(object):
             self.__winner = None
             if not self.isScoringGame():
                 self.sortPlayers()
+            self.double_riichi_chance = True
             self.hidePopups()
             self.setHandSeed()
             self.wall.build()
@@ -554,7 +558,12 @@ class Game(object):
             return self.shouldSave # as the server told us
 
     def __saveScores(self):
-        """save computed values to database, update score table and balance in status line"""
+        """
+        Save computed values to database.
+
+        Save computed values to database. Update score table and
+        balance in status line.
+        """
         if not self.needSave():
             return
         scoretime = datetime.datetime.now().replace(microsecond=0).isoformat()
@@ -563,15 +572,18 @@ class Game(object):
                 manualrules = '||'.join(x.rule.name for x in player.hand.usedRules)
             else:
                 manualrules = m18n('Score computed manually')
-            Query("INSERT INTO SCORE "
-                "(game,hand,data,manualrules,player,scoretime,won,prevailing,wind,"
-                "points,payments, balance,rotated,notrotated) "
-                "VALUES(%d,%d,?,?,%d,'%s',%d,'%s','%s',%d,%d,%d,%d,%d)" % \
-                (self.gameid, self.handctr, player.nameid,
-                    scoretime, int(player == self.__winner),
-                    WINDS[self.roundsFinished % 4], player.wind, player.handTotal,
-                    player.payment, player.balance, self.rotated, self.notRotated),
-                list([player.hand.string, manualrules]))
+            Query(
+                """INSERT INTO SCORE
+(game, hand, data, manualrules, player, scoretime, won, prevailing, wind,
+ points, payments,  balance, rotated, notrotated, repeatcounter, riichibets)
+VALUES (%d, %d, ?, ?, %d, '%s', %d, '%s', '%s', %d, %d, %d, %d, %d, %d, %d)"""
+                % (self.gameid, self.handctr, player.nameid, scoretime,
+                   int(player == self.__winner),
+                   WINDS[self.roundsFinished % 4], player.wind,
+                   player.handTotal, player.payment, player.balance,
+                   self.rotated, self.notRotated, self.repeat_counter,
+                   self.riichi_bets),
+                  list([player.hand.string, manualrules]))
             if Debug.scores:
                 self.debug('%s: handTotal=%s balance=%s %s' % (
                     player,
@@ -583,6 +595,7 @@ class Game(object):
                     if hasattr(rule.function, 'limitHand'):
                         tag = rule.function.limitHand.__class__.__name__
                     self.addCsvTag(tag)
+        print('saved {} counters and {} riichi bets'.format(self.repeat_counter, self.riichi_bets))
 
     def savePenalty(self, player, offense, amount):
         """save computed values to database, update score table and balance in status line"""
@@ -592,13 +605,15 @@ class Game(object):
         with Transaction():
             Query("INSERT INTO SCORE "
                 "(game,penalty,hand,data,manualrules,player,scoretime,"
-                "won,prevailing,wind,points,payments, balance,rotated,notrotated) "
-                "VALUES(%d,1,%d,?,?,%d,'%s',%d,'%s','%s',%d,%d,%d,%d,%d)" % \
+                "won,prevailing,wind,points,payments, balance,rotated,notrotated,repeat_counter,riichibets) "
+                "VALUES(%d,1,%d,?,?,%d,'%s',%d,'%s','%s',%d,%d,%d,%d,%d,%d,%d)" % \
                 (self.gameid, self.handctr, player.nameid,
-                    scoretime, int(player == self.__winner),
-                    WINDS[self.roundsFinished % 4], player.wind, 0,
-                    amount, player.balance, self.rotated, self.notRotated),
+                 scoretime, int(player == self.__winner),
+                 WINDS[self.roundsFinished % 4], player.wind, 0,
+                 amount, player.balance, self.rotated, self.notRotated,
+                 self.repeat_counter, self.riichi_bets),
                 list([player.hand.string, offense.name]))
+        print('saved {} counters and {} riichi bets'.format(self.repeat_counter, self.riichi_bets))
         if InternalParameters.field:
             InternalParameters.field.updateGUI()
 
@@ -668,7 +683,11 @@ class Game(object):
 
     @classmethod
     def loadFromDB(cls, gameid, client=None):
-        """load game by game id and return a new Game instance"""
+        """
+        Load game by game id.
+
+        Load game by game id and return a new Game instance.
+        """
         InternalParameters.logPrefix = 'S' if InternalParameters.isServer else 'C'
         qGame = Query("select p0,p1,p2,p3,ruleset,seed from game where id = %d" % gameid)
         if not qGame.records:
@@ -683,8 +702,10 @@ class Game(object):
         if qLastHand.records:
             (game.handctr, game.rotated) = qLastHand.records[0]
 
-        qScores = Query("select player, wind, balance, won, prevailing from score "
-            "where game=%d and hand=%d" % (gameid, game.handctr))
+        qScores = Query(
+            """select
+player, wind, balance, won, prevailing, repeatcounter, riichibets
+from score where game=%d and hand=%d""" % (gameid, game.handctr))
         # default value. If the server saved a score entry but our client did not,
         # we get no record here. Should we try to fix this or exclude such a game from
         # the list of resumable games?
@@ -703,12 +724,15 @@ class Game(object):
             if record[3]:
                 game.winner = player
             prevailing = record[4]
+            game.repeat_counter = record[5]
+            game.riichi_bets = record[6]
         game.roundsFinished = WINDS.index(prevailing)
         game.handctr += 1
         game.notRotated += 1
         game.maybeRotateWinds()
         game.sortPlayers()
         game.wall.decorate()
+        print('recovered {} counters and {} riichi bets'.format(game.repeat_counter, game.riichi_bets))
         return game
 
     def finished(self):
@@ -780,7 +804,9 @@ class Game(object):
             return (i // 100) * 100 + 100
 
         # TODO: handle bankrupcy.
+        # TODO: multiple winner
         winner = self.__winner
+        # for winner in self.winners
         if winner:
             # TODO: Hand back riichi bet
             winner.wonCount += 1
@@ -794,13 +820,17 @@ class Game(object):
             # score = winner.handTotal + self.repeats * 100
             if payer:
                 # Ron
-                if Debug.explain:
+                if Debug.scores:
                     self.debug('%s: winner %s. %s pays for all' % \
                                    (self.handId(), winner, payer))
                 score = score * 6 if winner.wind == 'E' else score * 4
                 score = upToHundred(score)
-                payer.getsPayment(-score)
-                winner.getsPayment(score)
+                payer.getsPayment(
+                    -score
+                     - 3 * self.repeat_counter * self.ruleset.repeatValue)
+                winner.getsPayment(
+                    score
+                    + 3 * self.repeat_counter * self.ruleset.repeatValue)
             else:
                 # Tsumo
                 if winner.wind == 'E':
@@ -810,17 +840,35 @@ class Game(object):
                         # Erm, not a loser after all.
                         continue
                     if loser.wind == 'E':
-                        loser.getsPayment(-upToHundred(2 * score))
+                        loser.getsPayment(
+                            -upToHundred(2 * score))
                         winner.getsPayment(upToHundred(2 * score))
                     else:
                         loser.getsPayment(-upToHundred(score))
                         winner.getsPayment(upToHundred(score))
+                    # The repeat value is not doubled for E.
+                    loser.getsPayment(
+                        -self.repeat_counter * self.ruleset.repeatValue)
+                    winner.getsPayment(
+                        self.repeat_counter * self.ruleset.repeatValue)
+            if winner.wind == 'E':
+                self.repeat_counter += 1
+                if Debug.scores:
+                    self.debug('East win, now {} counter(s).'.format(
+                            self.repeat_counter))
+            else:
+                if Debug.scores:
+                    self.debug('Win, but not by East. Resetting counters.')
+                self.repeat_counter = 0
         else:
             # Here we should check for  Nagashi mangan. TODO
             # And settle the noten penalties. TODO
             # Or maybe settle chombo penalties. TODO
-            pass
-
+            # if not chombo ...
+            self.repeat_counter += 1
+            if Debug.scores:
+                    self.debug('No winner, now {} counter(s)'.format(
+                        self.repeat_counter))
 
     def lastMoves(self, only=None, without=None):
         """filters and yields the moves in reversed order"""

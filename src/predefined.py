@@ -112,6 +112,17 @@ class ClassicalChinese(PredefinedRuleset):
         self.parameterRules.add(Rule('must declare calling hand',
                 'boolmustDeclareCallingHand||Omandatory', parameter=False,
                 description=m18n('Mah Jongg is only allowed after having declared to have a calling hand')))
+        # Two rules that are used for Japanese style games.
+        self.parameterRules.add(Rule(
+                'Chinese game', 'intbasicStyle||Ointernal||Omandatory',
+                parameter=Ruleset.Chinese, description=m18n('''\
+When this is set to Ruleset.Japanese, scoring, rotation and a number of \
+other things are handled differently.''')))
+        self.parameterRules.add(Rule(
+                'No repeat points', 'intrepeatValue||Ointernal',
+                parameter=0, description=m18n('''\
+The number of points added for each draw or East win in Japanese games.''')))
+
 
     def loadRules(self):
         """define the rules"""
@@ -720,13 +731,15 @@ Self-drawn last tile. Not applied for concealed pinfu.''')))
         self.parameterRules.add(Rule(
                 'Japanese game', 'intbasicStyle||Ointernal',
                 parameter=Ruleset.Japanese))
-        # Note the min *and* max for yakuman and kong box size.
         self.parameterRules.add(Rule(
-                'Points for mangan',
-                'intlimit||Omandatory', parameter=2000,
+                'Points for mangan', 'intlimit||Omandatory', parameter=2000,
                 description=m18n(u'''\
 The points for a mangan or five fan (doubles) hand. Higher limits \
 (yakuman &c.) are calculated from this.''')))
+        self.parameterRules.add(Rule(
+                'Repeat points', 'intrepeatValue||Omandatory',
+                parameter=100, description=m18n('''\
+The number of points added for each draw or East win.''')))
         self.parameterRules.add(Rule(
                 'Play with the roof off', 'boolroofOff||Omandatory||Ointernal',
                 parameter=False))
@@ -778,7 +791,7 @@ class JapaneseJapaneseStyleRuleset(JapaneseStyleRuleset):
     The EMA rules mentions two differences:
     1. All simples may be open. This is the change that is implemented.
     2. There is no two-yaku requirement when there are five or more
-       (repeat) counters. The whole counter rule is something TODO.
+       (repeat) counters.
     3. When calling a chow/chi, in Japan it is forbidden to discard
        the called tyle again. TODO. (Not sure about the point of
        this. Calling that chi in the first place would be an

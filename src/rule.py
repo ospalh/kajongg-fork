@@ -342,7 +342,6 @@ class Ruleset(object):
             - a list: the full ruleset specification (probably sent from the server)
             - a string: The hash value of a ruleset"""
         self.name = name
-        self.basicStyle = Ruleset.Chinese
         self.rulesetId = 0
         self.__hash = None
         self.allRules = []
