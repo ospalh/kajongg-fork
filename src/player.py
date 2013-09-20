@@ -151,6 +151,7 @@ class Player(object):
         self.playedDangerous = False
         self.usedDangerousFrom = None
         self.isCalling = False
+        self.ippatsu_chance = False
         self.__hand = None
 
     def invalidateHand(self):
