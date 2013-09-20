@@ -524,7 +524,7 @@ class Game(object):
         # “self.nixChances(self)”.
 
         if not nix_for or self is nix_for:
-            if (self.double_riichi_chance):
+            if self.double_riichi_chance and self.belongsToHumanPlayer():
                 self.debug('No double riichi any more!')
             self.double_riichi_chance = False
         for player in self.players:
