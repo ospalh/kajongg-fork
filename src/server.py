@@ -421,12 +421,14 @@ class ServerTable(Table):
         """the active player gets a tile from the dead end. Tell all clients."""
         requests = self.prioritize(requests)
         if requests and requests[0].answer == Message.MahJongg:
+            print('robbed kong')
             requests[0].answer.serverAction(self, requests[0])
         else:
             # Like exposing a chow or pung, *successfully* exposing a
             # kong also nixes chances for Blessing of Earth, Blessing
             # of Man, double riichi and ippatsu. When we got here we
             # finally know that it didn’t get robbed.
+            print('unrobbed kong')
             self.game.nixChances()
             self.pickTile(requests, deadEnd=True)
 
@@ -613,7 +615,7 @@ class ServerTable(Table):
             # If we *successfully* expose a meld, that nixes chances
             # for Blessing of Earth, Blessing of Man, double riichi
             # and ippatsu. Trying to claim a kong that then gets
-            # robbed, the exposure is not a successful. See below for
+            # robbed, the exposure is not successful. See below for
             # that case.
             self.game.nixChances()
             block.callback(self.moved)
