@@ -236,6 +236,13 @@ class DBHandle(QSqlDatabase):
             self.removeGameServer()
         if not self.tableHasField('score', 'notrotated'):
             Query('ALTER TABLE score add notrotated integer default 0')
+        if not self.tableHasField('score', 'repeatcounter'):
+            # Keep track of riichi-style counters.
+            Query('ALTER TABLE score add repeatcounter integer default 0')
+        if not self.tableHasField('score', 'riichibets'):
+            # Keep track of riichi bets left over from exhaustive
+            # draws.
+            Query('ALTER TABLE score add riichibets integer default 0')
         self.removeUsedRuleset()
         self.stopGamesWithRegex()
         self.__generateDbIdent()
