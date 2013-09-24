@@ -428,7 +428,6 @@ class ServerTable(Table):
             # kong also nixes chances for Blessing of Earth, Blessing
             # of Man, double riichi and ippatsu. When we got here we
             # finally know that it didn’t get robbed.
-            print('unrobbed kong')
             self.game.nixChances()
             self.pickTile(requests, deadEnd=True)
 
