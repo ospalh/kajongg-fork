@@ -191,17 +191,33 @@ class ClosedWait(Function):
         return hand.lastMeld.pairs[1][1] == hand.lastTile[1]
 
 
+class Pinfu(Function):
+    u"""
+    Pinfu
+
+    Pinfu, that is, a hand with four chows and a valueless pair. This
+    is not used directly but by ConcealedPinfu and OpenPinfu. The
+    point of this is that ZeroPointHand might apply to some SevePairs
+    hands, or to Thirteen Orphans.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        return StandardMahJongg.appliesToHand(hand) \
+            and ZeroPointHand.appliesToHand(hand)
+
+
 class OpenPinfu(Function):
     @staticmethod
     def appliesToHand(hand):
-        return not MostlyConcealed.appliesToHand(hand) \
-            and ZeroPointHand.appliesToHand(hand)
+        return Pinfu.appliesToHand(hand) \
+            and not MostlyConcealed.appliesToHand(hand)
 
 
 class SelfDraw(Function):
     @staticmethod
     def appliesToHand(hand):
-        if not hand.lastSource or ConcealedPinfu.appliesToHand(hand):
+        if not hand.lastSource or ConcealedPinfu.appliesToHand(hand) \
+                or SevenPairs.appliesToHand(hand):
             return False
         return not (hand.lastSource in 'dkZ')
 
@@ -233,6 +249,7 @@ class ZeroPointHand(Function):
     def appliesToHand(hand):
         return not any(x.meld for x in hand.usedRules if x.meld and len(x.meld) > 1)
 
+
 class ConcealedPinfu(Function):
     u"""
     Concealend pinfu.
@@ -243,16 +260,15 @@ class ConcealedPinfu(Function):
     """
     @staticmethod
     def appliesToHand(hand):
-        if not MostlyConcealed.appliesToHand(hand):
+        # Check if it is concealed pinfu
+        if not MostlyConcealed.appliesToHand(hand) \
+                or not Pinfu.appliesToHand(hand):
             return False
-        if ClosedWait.appliesToHand(hand) or EdgeWait.appliesToHand(hand) \
-                or SingleWait.appliesToHand(hand):
-            # What remains in the end (when hands with pungs are
-            # eliminated in the next step) should be finishing on a
-            # two-sided wait.
-            return False
-        # We ignore bonus tiles.
-        return not any(x.meld for x in hand.usedRules if x.meld)
+        # Check that the wait condition applies. Or rather, that the
+        # waiting conditions that give points do not apply.
+        return not (ClosedWait.appliesToHand(hand)
+                    or EdgeWait.appliesToHand(hand)
+                    or SingleWait.appliesToHand(hand))
 
 
 class NoChow(Function):
