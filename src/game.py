@@ -483,6 +483,8 @@ class Game(object):
     def prepareHand(self):
         """prepares the next hand"""
         del self.moves[:]
+        if self.belongsToHumanPlayer():
+            self.debug('Double riichi chance once more.')
         self.double_riichi_chance = True
         if self.finished():
             if InternalParameters.field and isAlive(InternalParameters.field):
@@ -494,8 +496,6 @@ class Game(object):
             self.__winner = None
             if not self.isScoringGame():
                 self.sortPlayers()
-            self.double_riichi_chance = True
-            print('Double riichi chance once more.')
             self.hidePopups()
             self.setHandSeed()
             self.wall.build()
@@ -527,8 +527,6 @@ class Game(object):
         # (*) After all we do duck typing and call-by-object-reference,
         # so there is no reason not to say something like
         # “self.nixChances(self)”.
-        if not nix_for:
-            self.debug('Nixing chances (meld). We are {}'.format(self))
         if not nix_for or self is nix_for:
             if self.double_riichi_chance and self.belongsToHumanPlayer():
                 self.debug('No double riichi any more!')
@@ -598,7 +596,6 @@ VALUES (%d, %d, ?, ?, %d, '%s', %d, '%s', '%s', %d, %d, %d, %d, %d, %d, %d)"""
                     if hasattr(rule.function, 'limitHand'):
                         tag = rule.function.limitHand.__class__.__name__
                     self.addCsvTag(tag)
-        print('saved {} counters and {} riichi bets'.format(self.repeat_counter, self.riichi_bets))
 
     def savePenalty(self, player, offense, amount):
         """save computed values to database, update score table and balance in status line"""
@@ -616,7 +613,6 @@ VALUES (%d, %d, ?, ?, %d, '%s', %d, '%s', '%s', %d, %d, %d, %d, %d, %d, %d)"""
                  amount, player.balance, self.rotated, self.notRotated,
                  self.repeat_counter, self.riichi_bets),
                 list([player.hand.string, offense.name]))
-        print('saved {} counters and {} riichi bets'.format(self.repeat_counter, self.riichi_bets))
         if InternalParameters.field:
             InternalParameters.field.updateGUI()
 
@@ -735,7 +731,6 @@ from score where game=%d and hand=%d""" % (gameid, game.handctr))
         game.maybeRotateWinds()
         game.sortPlayers()
         game.wall.decorate()
-        print('recovered {} counters and {} riichi bets'.format(game.repeat_counter, game.riichi_bets))
         return game
 
     def finished(self):
