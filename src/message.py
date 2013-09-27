@@ -571,6 +571,23 @@ def __scanSelf():
                         msg = glob()
                         type.__setattr__(Message, msg.name.replace(' ', ''), msg)
 
+class MessageTurnInterrupted(ServerMessage):
+    u"""
+    Turn interrupted message.
+
+    Turn interrupted message. A message that is send every time a tile
+    is claimed successfully, That is, a chow or pung is revealed or a
+    kong is show and not robbed.
+    """
+    def clientAction(self, client, move):
+        """
+        Clients nix extra yaku chances.
+
+        Clients should note that double richi, blessing of NN and
+        ippatsu chances are over.
+        """
+        return client.game.nixChances()
+
 class ChatMessage:
     """holds relevant info about a chat message"""
     def __init__(self, tableid, fromUser=None, message=None, isStatusMessage=False):

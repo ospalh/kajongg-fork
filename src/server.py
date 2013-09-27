@@ -429,6 +429,8 @@ class ServerTable(Table):
             # of Man, double riichi and ippatsu. When we got here we
             # finally know that it didn’t get robbed.
             self.game.nixChances()
+            print('unrobbed kong: call nix chances')
+            self.tellAll(None, Message.TurnInterrupted, self.dummyCallback)
             self.pickTile(requests, deadEnd=True)
 
     def clientDiscarded(self, msg):
@@ -581,6 +583,7 @@ class ServerTable(Table):
         discardingPlayer = self.game.activePlayer
         hasTiles.remove(claimedTile)
         meld = Meld(meldTiles)
+        print('claimTile {}, nextMessage: {}'.format(claim, nextMessage))
         if len(meldTiles) != 4 and meld.meldType not in [PAIR, PUNG, KONG, CHOW]:
             msg = m18nE('%1 wrongly said %2 for meld %3') + 'x:' + str(meld.meldType) + meld.joined
             self.abort(msg, player.name, claim.name, str(meld))
@@ -617,6 +620,8 @@ class ServerTable(Table):
             # robbed, the exposure is not successful. See below for
             # that case.
             self.game.nixChances()
+            print('pung/chow: call nix chances')
+            block.tellAll(None, Message.TurnInterrupted)
             block.callback(self.moved)
 
     def declareKong(self, player, meldTiles):
@@ -746,6 +751,9 @@ class ServerTable(Table):
         block.tellAll(player, command, **kwargs)
         block.callback(callback)
         return block
+
+    def dummyCallback(self, dummyRequests):
+        pass
 
 class MJServer(object):
     """the real mah jongg server"""

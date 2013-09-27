@@ -495,6 +495,7 @@ class Game(object):
             if not self.isScoringGame():
                 self.sortPlayers()
             self.double_riichi_chance = True
+            print('Double riichi chance once more.')
             self.hidePopups()
             self.setHandSeed()
             self.wall.build()
@@ -526,7 +527,8 @@ class Game(object):
         # (*) After all we do duck typing and call-by-object-reference,
         # so there is no reason not to say something like
         # “self.nixChances(self)”.
-
+        if not nix_for:
+            self.debug('Nixing chances (meld). We are {}'.format(self))
         if not nix_for or self is nix_for:
             if self.double_riichi_chance and self.belongsToHumanPlayer():
                 self.debug('No double riichi any more!')
