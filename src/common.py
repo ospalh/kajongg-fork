@@ -18,14 +18,17 @@ along with this program if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
+from __future__ import print_function
+
 from collections import defaultdict
 
 import sip
+import traceback
 
 # common must not import util
 
 Preferences = None # pylint: disable=C0103
-# pylint - just like Debug, InternalParameters
+# pylint - just like Debug, Options
 # Preferences being a class or an instance is irrelevant for the user
 
 WINDS = 'ESWN'
@@ -45,7 +48,7 @@ def isAlive(qobj):
     else:
         return True
 
-class Debug:
+class Debug(object):
     """holds flags for debugging output. At a later time we might
     want to add command line parameters for initialisation, and
     look at kdebugdialog"""
@@ -72,6 +75,8 @@ class Debug:
     deferredBlock = False
     stack = False
     events = ''
+    table = False
+    gc = False
 
     def __init__(self):
         raise Exception('Debug is not meant to be instantiated')
@@ -113,32 +118,66 @@ Options {stropt} take a string argument like {example}""".format(
                 return '--debug: unknown option %s' % option
             if type(Debug.__dict__[option]) != type(value):
                 return '--debug: wrong value for option %s' % option
-            Debug.__dict__[option] = value
+            type.__setattr__(Debug, option, value)
 
-class InternalParameters:
+class FixedClass(type):
+    """Metaclass: after the class variable fixed is set to True,
+    all class variables become immutable"""
+    def __setattr__(cls, key, value):
+        if cls.fixed:
+            for line in traceback.format_stack()[:-2]:
+                print(line, end='')
+            raise SystemExit('{cls}.{key} may not be changed'.format(cls=cls.__name__, key=key))
+        else:
+            type.__setattr__(cls, key, value)
+
+class Options(object):
     """they are never saved in a config file. Some of them
     can be defined on the command line."""
-    version = '4.11.0'
-    scaleScene = True
-    reactor = None
-    game = None # will only be set by command line --game
+    __metaclass__ = FixedClass
     demo = False
     showRulesets = False
     rulesetName = None	# will only be set by command line --ruleset
     ruleset = None # from rulesetName
+    host = None
     player = None
     dbPath = None
-    dbIdent = None
-    app = None
     socket = None
     playOpen = False
-    field = None
     gui = False
-    isServer = False
     AI = 'Default'
     csv = None
-    logPrefix = 'C'
     continueServer = False
+    fixed = False
+
+    def __init__(self):
+        raise Exception('Options is not meant to be instantiated')
+
+    @staticmethod
+    def defaultPort():
+        """8000 plus version: for version 4.9.5 we use 8409"""
+        parts = Internal.version.split('.')
+        return 8000 + int(parts[0]) * 100 + int(parts[1])
+
+class SingleshotOptions(object):
+    """Options which are cleared after having been used once"""
+    table = False
+    join = False
+    game = None
+
+class Internal(object):
+    """global things"""
+    version = '4.11.0'
+    logPrefix = 'C'
+    isServer = False
+    scaleScene = True
+    reactor = None
+    app = None
+    dbIdent = None
+    field = None
+    game = None
+    autoPlay = False
+    quitWaitTime = 0 # in milliseconds
     try:
         from PyKDE4.kdeui import KMessageBox
         haveKDE = True
@@ -146,13 +185,7 @@ class InternalParameters:
         haveKDE = False
 
     def __init__(self):
-        raise Exception('InternalParameters is not meant to be instantiated')
-
-    @staticmethod
-    def defaultPort():
-        """8000 plus version: for version 4.9.5 we use 8409"""
-        parts = InternalParameters.version.split('.')
-        return 8000 + int(parts[0]) * 100 + int(parts[1])
+        raise Exception('Internal is not meant to be instantiated')
 
 class IntDict(defaultdict):
     """a dict where the values are expected to be numeric, so

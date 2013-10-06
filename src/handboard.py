@@ -28,7 +28,7 @@ from hand import Hand
 from board import Board, rotateCenter
 
 from util import m18n, logDebug
-from common import Preferences, InternalParameters, Debug, isAlive
+from common import Preferences, Internal, Debug, isAlive
 from animation import animate
 
 class TileAttr(object):
@@ -81,7 +81,7 @@ class HandBoard(Board):
         self.concealedMeldDistance = 0.0
         self.lowerY = 1.0
         self.player = player
-        Board.__init__(self, 15.6, 2.0, InternalParameters.field.tileset)
+        Board.__init__(self, 15.6, 2.0, Internal.field.tileset)
         self.isHandBoard = True
         self.tileDragEnabled = False
         self.setParentItem(player.front)
@@ -99,45 +99,45 @@ class HandBoard(Board):
         scale = (sideRect.width() + sideRect.height()) / (boardRect.width() - boardRect.height())
         self.setScale(scale)
 
+    @property
+    def showShadows(self):
+        """the active value"""
+        return self._showShadows
+
+    # this is ordered such that pylint does not complain about identical code in board.py
+
     def name(self):
         """for debugging messages"""
         return self.player.name
 
-    @apply
-    # pylint: disable=E0202
-    def showShadows():
-        """the active lightSource"""
-        def fget(self):
-            # pylint: disable=W0212
-            return self._showShadows
-        def fset(self, value):
-            """set active lightSource"""
-            # pylint: disable=W0212
-            if self._showShadows is None or self._showShadows != value:
-                if value:
-                    self.setPos(yHeight= 1.5)
-                else:
-                    self.setPos(yHeight= 1.0)
-                if value:
-                    self.lowerY = 1.2
-                else:
-                    self.lowerY = 1.0
-                self.setRect(15.6, 1.0 + self.lowerY)
-                self._reload(self.tileset, showShadows=value)
-                self.sync()
-        return property(**locals())
+    @showShadows.setter
+    def showShadows(self, value): # pylint: disable=W0221
+        """set showShadows"""
+        if self._showShadows is None or self._showShadows != value:
+            if value:
+                self.setPos(yHeight= 1.5)
+            else:
+                self.setPos(yHeight= 1.0)
+            if value:
+                self.lowerY = 1.2
+            else:
+                self.lowerY = 1.0
+            self.setRect(15.6, 1.0 + self.lowerY)
+            self._reload(self.tileset, showShadows=value)
+            self.sync()
 
-    @apply
-    def rearrangeMelds(): # pylint: disable=E0202
+    @property
+    def rearrangeMelds(self):
         """when setting this, concealed melds are grouped"""
-        def fget(self):
-            return bool(self.concealedMeldDistance)
-        def fset(self, rearrangeMelds):
-            if rearrangeMelds != self.rearrangeMelds:
-                self.concealedMeldDistance = self.exposedMeldDistance if rearrangeMelds else 0.0
-                self._reload(self.tileset, self._lightSource) # pylint: disable=W0212
-                self.sync() # pylint: disable=W0212
-        return property(**locals())
+        return bool(self.concealedMeldDistance)
+
+    @rearrangeMelds.setter
+    def rearrangeMelds(self, rearrangeMelds):
+        """when setting this, concealed melds are grouped"""
+        if rearrangeMelds != self.rearrangeMelds:
+            self.concealedMeldDistance = self.exposedMeldDistance if rearrangeMelds else 0.0
+            self._reload(self.tileset, self._lightSource) # pylint: disable=W0212
+            self.sync() # pylint: disable=W0212
 
     def setEnabled(self, enabled):
         """enable/disable this board"""
@@ -223,7 +223,7 @@ class HandBoard(Board):
         self.player.remove(tile, meld)
         if hadFocus:
             self.focusTile = None # force calculation of new focusTile
-        InternalParameters.field.handSelectorChanged(self)
+        Internal.field.handSelectorChanged(self)
 
     def dragMoveEvent(self, event):
         """allow dropping of tile from ourself only to other state (open/concealed)"""
@@ -280,7 +280,6 @@ class HandBoard(Board):
                     # user pressed ESCAPE
                     return None
             assert not tile.element.istitle() or meld.pairs[0] != 'Xy', tile
-            tile = None
         senderBoard = meld[0].board
         senderBoard.removing(meld=meld)
         if senderBoard == self:
@@ -471,7 +470,7 @@ class HandBoard(Board):
         else:
             self.hasFocus = bool(adding)
         self.showMoveHelper(self.player.game.isScoringGame() and not self.tiles)
-        InternalParameters.field.handSelectorChanged(self)
+        Internal.field.handSelectorChanged(self)
         if adding:
             assert len(self.tiles) >= len(adding)
 
@@ -485,11 +484,11 @@ class HandBoard(Board):
             for idx, variant in enumerate(variants):
                 action = menu.addAction(shortcuttedMeldName(variant.meldType))
                 action.setData(QVariant(idx))
-            if InternalParameters.field.centralView.dragObject:
+            if Internal.field.centralView.dragObject:
                 menuPoint = QCursor.pos()
             else:
                 menuPoint = tile.board.tileFaceRect().bottomRight()
-                view = InternalParameters.field.centralView
+                view = Internal.field.centralView
                 menuPoint = view.mapToGlobal(view.mapFromScene(tile.graphics.mapToScene(menuPoint)))
             action = menu.exec_(menuPoint)
             if not action:

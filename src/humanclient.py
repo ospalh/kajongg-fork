@@ -18,267 +18,34 @@ along with this program if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
-import socket, subprocess, time, datetime, os, sys
-import csv, re, resource
+import csv, resource, random
 
 from twisted.spread import pb
-from twisted.cred import credentials
-from twisted.internet.defer import Deferred, succeed
-from twisted.internet.address import UNIXAddress
+from twisted.python.failure import Failure
+from twisted.internet.defer import Deferred, succeed, DeferredList
 from PyQt4.QtCore import Qt, QTimer
-from PyQt4.QtGui import QDialog, QDialogButtonBox, QVBoxLayout, QGridLayout, \
-    QLabel, QComboBox, QLineEdit, QPushButton, QFormLayout, \
+from PyQt4.QtGui import QDialog, QVBoxLayout, QGridLayout, \
+    QLabel, QPushButton, \
     QProgressBar, QRadioButton, QSpacerItem, QSizePolicy
 
-from kde import Sorry, Information, QuestionYesNo, KDialogButtonBox, KUser, KIcon, \
+from kde import Sorry, Information, QuestionYesNo, KIcon, \
     DialogIgnoringEscape
 
-from util import m18n, m18nc, logWarning, logException, socketName, english, \
-    appdataDir, logInfo, logDebug, removeIfExists, which
-from util import SERVERMARK
+from util import m18n, logWarning, logException, \
+    logInfo, logDebug
 from message import Message, ChatMessage
 from chat import ChatWindow
-from common import InternalParameters, Preferences, Debug, isAlive
-from game import Players
-from query import Transaction, Query
+from common import Options, SingleshotOptions, Internal, Preferences, Debug, isAlive
+from query import Query
 from board import Board
 from client import Client, ClientTable
-from statesaver import StateSaver
 from meld import Meld
-from tables import TableList
+from tables import TableList, SelectRuleset
 from sound import Voice
 import intelligence
 import altint
-
-from guiutil import ListComboBox
+from login import Connection
 from rule import Ruleset
-
-class LoginAborted(Exception):
-    """the user aborted the login"""
-    pass
-
-class NetworkOffline(Exception):
-    """we are offline"""
-    pass
-
-class LoginDialog(QDialog):
-    """login dialog for server"""
-    def __init__(self):
-        """self.servers is a list of tuples containing server and last playername"""
-        QDialog.__init__(self, None)
-        self.setWindowTitle(m18n('Login') + ' - Kajongg')
-        self.setupUi()
-
-        localName = m18nc('kajongg name for local game server', Query.localServerName)
-        self.servers = Query('select url,lastname from server order by lasttime desc').records
-        servers = [m18nc('kajongg name for local game server', x[0]) for x in self.servers]
-        # the first server combobox item should be default: either the last used server
-        # or localName for autoPlay
-        if localName not in servers:
-            servers.append(localName)
-        if 'kajongg.org' not in servers:
-            servers.append('kajongg.org')
-        if InternalParameters.demo:
-            servers.remove(localName)    # we want a unique list, it will be re-used for all following games
-            servers.insert(0, localName)   # in this process but they will not be autoPlay
-        self.cbServer.addItems(servers)
-        self.passwords = Query('select url, p.name, passwords.password from passwords, player p '
-            'where passwords.player=p.id').records
-        Players.load()
-        self.cbServer.editTextChanged.connect(self.serverChanged)
-        self.cbUser.editTextChanged.connect(self.userChanged)
-        self.serverChanged()
-        StateSaver(self)
-
-    def setupUi(self):
-        """create all Ui elements but do not fill them"""
-        buttonBox = KDialogButtonBox(self)
-        buttonBox.setStandardButtons(QDialogButtonBox.Cancel|QDialogButtonBox.Ok)
-        # Ubuntu 11.10 unity is a bit strange - without this, it sets focus on
-        # the cancel button (which it shows on the left). I found no obvious
-        # way to use setDefault and setAutoDefault for fixing this.
-        buttonBox.button(QDialogButtonBox.Ok).setFocus(True)
-        buttonBox.accepted.connect(self.accept)
-        buttonBox.rejected.connect(self.reject)
-        vbox = QVBoxLayout(self)
-        self.grid = QFormLayout()
-        self.cbServer = QComboBox()
-        self.cbServer.setEditable(True)
-        self.grid.addRow(m18n('Game server:'), self.cbServer)
-        self.cbUser = QComboBox()
-        self.cbUser.setEditable(True)
-        self.grid.addRow(m18n('Username:'), self.cbUser)
-        self.edPassword = QLineEdit()
-        self.edPassword.setEchoMode(QLineEdit.PasswordEchoOnEdit)
-        self.grid.addRow(m18n('Password:'), self.edPassword)
-        self.cbRuleset = ListComboBox()
-        self.grid.addRow(m18nc('kajongg', 'Ruleset:'), self.cbRuleset)
-        vbox.addLayout(self.grid)
-        vbox.addWidget(buttonBox)
-        pol = QSizePolicy()
-        pol.setHorizontalPolicy(QSizePolicy.Expanding)
-        self.cbUser.setSizePolicy(pol)
-
-    def accept(self):
-        """user entered OK"""
-        if self.url == 'localhost':
-            # we have localhost if we play a Local Game: client and server are identical,
-            # we have no security concerns about creating a new account
-            Players.createIfUnknown(unicode(self.cbUser.currentText()))
-        QDialog.accept(self)
-
-    def serverChanged(self, dummyText=None):
-        """the user selected a different server"""
-        records = Query('select player.name from player, passwords '
-                'where passwords.url=? and passwords.player = player.id', list([self.url])).records
-        players = list(x[0] for x in records)
-        preferPlayer = InternalParameters.player
-        if preferPlayer:
-            if preferPlayer in players:
-                players.remove(preferPlayer)
-            players.insert(0, preferPlayer)
-        self.cbUser.clear()
-        self.cbUser.addItems(players)
-        if not self.cbUser.count():
-            user = KUser() if os.name == 'nt' else KUser(os.geteuid())
-            self.cbUser.addItem(user.fullName() or user.loginName())
-        if not preferPlayer:
-            userNames = [x[1] for x in self.servers if x[0] == self.url]
-            if userNames:
-                userIdx = self.cbUser.findText(userNames[0])
-                if userIdx >= 0:
-                    self.cbUser.setCurrentIndex(userIdx)
-        showPW = self.url != Query.localServerName
-        self.grid.labelForField(self.edPassword).setVisible(showPW)
-        self.edPassword.setVisible(showPW)
-        self.grid.labelForField(self.cbRuleset).setVisible(not showPW and not InternalParameters.ruleset)
-        self.cbRuleset.setVisible(not showPW and not InternalParameters.ruleset)
-        if not showPW:
-            self.cbRuleset.clear()
-            if InternalParameters.ruleset:
-                self.cbRuleset.items = [InternalParameters.ruleset]
-            else:
-                self.cbRuleset.items = Ruleset.selectableRulesets(self.url)
-
-    def userChanged(self, text):
-        """the username has been changed, lookup password"""
-        if text == '':
-            self.edPassword.clear()
-            return
-        passw = None
-        for entry in self.passwords:
-            if entry[0] == self.url and entry[1] == unicode(text):
-                passw = entry[2]
-        if passw:
-            self.edPassword.setText(passw)
-        else:
-            self.edPassword.clear()
-
-    @apply
-    def url():
-        """abstracts the url of the dialog"""
-        def fget(self):
-            return english(unicode(self.cbServer.currentText()))
-        return property(**locals())
-
-    @apply
-    def host():
-        """abstracts the host of the dialog"""
-        def fget(self):
-            return self.url.partition(':')[0]
-        return property(**locals())
-
-    @apply
-    def port():
-        """abstracts the port of the dialog"""
-        def fget(self):
-            try:
-                return int(self.url.partition(':')[2])
-            except ValueError:
-                return InternalParameters.defaultPort()
-        return property(**locals())
-
-    @apply
-    def username():
-        """abstracts the username of the dialog"""
-        def fget(self):
-            return unicode(self.cbUser.currentText())
-        return property(**locals())
-
-    @apply
-    def password(): # pylint: disable=E0202
-        """abstracts the password of the dialog"""
-        def fget(self):
-            return unicode(self.edPassword.text())
-        def fset(self, password):
-            self.edPassword.setText(password)
-        return property(**locals())
-
-class AddUserDialog(QDialog):
-    """add a user account on a server: This dialog asks for the needed attributes"""
-    # pylint: disable=R0902
-    # pylint we need more than 10 instance attributes
-
-    def __init__(self, url, username, password):
-        QDialog.__init__(self, None)
-        self.setWindowTitle(m18n('Create User Account') + ' - Kajongg')
-        self.buttonBox = KDialogButtonBox(self)
-        self.buttonBox.setStandardButtons(QDialogButtonBox.Cancel|QDialogButtonBox.Ok)
-        self.buttonBox.accepted.connect(self.accept)
-        self.buttonBox.rejected.connect(self.reject)
-        vbox = QVBoxLayout(self)
-        grid = QFormLayout()
-        self.lbServer = QLabel()
-        self.lbServer.setText(url)
-        grid.addRow(m18n('Game server:'), self.lbServer)
-        self.lbUser = QLabel()
-        grid.addRow(m18n('Username:'), self.lbUser)
-        self.edPassword = QLineEdit()
-        self.edPassword.setEchoMode(QLineEdit.PasswordEchoOnEdit)
-        grid.addRow(m18n('Password:'), self.edPassword)
-        self.edPassword2 = QLineEdit()
-        self.edPassword2.setEchoMode(QLineEdit.PasswordEchoOnEdit)
-        grid.addRow(m18n('Repeat password:'), self.edPassword2)
-        vbox.addLayout(grid)
-        vbox.addWidget(self.buttonBox)
-        pol = QSizePolicy()
-        pol.setHorizontalPolicy(QSizePolicy.Expanding)
-        self.lbUser.setSizePolicy(pol)
-
-        self.edPassword.textChanged.connect(self.passwordChanged)
-        self.edPassword2.textChanged.connect(self.passwordChanged)
-        StateSaver(self)
-        self.username = username
-        self.password = password
-        self.passwordChanged()
-        self.edPassword2.setFocus()
-
-    def passwordChanged(self, dummyText=None):
-        """password changed"""
-        self.validate()
-
-    def validate(self):
-        """does the dialog hold valid data?"""
-        equal = self.edPassword.size() and self.edPassword.text() == self.edPassword2.text()
-        self.buttonBox.button(QDialogButtonBox.Ok).setEnabled(equal)
-
-    @apply
-    def username(): # pylint: disable=E0202
-        """abstracts the username of the dialog"""
-        def fget(self):
-            return unicode(self.lbUser.text())
-        def fset(self, username):
-            self.lbUser.setText(username)
-        return property(**locals())
-
-    @apply
-    def password(): # pylint: disable=E0202
-        """abstracts the password of the dialog"""
-        def fget(self):
-            return unicode(self.edPassword.text())
-        def fset(self, password):
-            self.edPassword.setText(password)
-        return property(**locals())
 
 class SelectChow(DialogIgnoringEscape):
     """asks which of the possible chows is wanted"""
@@ -368,7 +135,7 @@ class DlgButton(QPushButton):
         key = Board.mapChar2Arrow(event)
         if key in [Qt.Key_Left, Qt.Key_Right]:
             game = self.client.game
-            if game.activePlayer == game.myself:
+            if game and game.activePlayer == game.myself:
                 game.myself.handBoard.keyPressEvent(event)
                 self.setFocus()
                 return
@@ -402,7 +169,7 @@ class ClientDialog(QDialog):
 
     def keyPressEvent(self, event):
         """ESC selects default answer"""
-        if self.client.game.autoPlay:
+        if not self.client.game or self.client.game.autoPlay:
             return
         if event.key() in [Qt.Key_Escape, Qt.Key_Space]:
             self.selectButton()
@@ -427,6 +194,8 @@ class ClientDialog(QDialog):
 
     def focusTileChanged(self):
         """update icon and tooltip for the discard button"""
+        if not self.client.game:
+            return
         for button in self.buttons:
             button.decorate(self.client.game.myself.handBoard.focusTile)
         for tile in self.client.game.myself.handBoard.lowerHalfTiles():
@@ -438,7 +207,7 @@ class ClientDialog(QDialog):
             txt = '<br><br>'.join(txt)
             tile.graphics.setToolTip(txt)
         if self.client.game.activePlayer == self.client.game.myself:
-            InternalParameters.field.handSelectorChanged(self.client.game.myself.handBoard)
+            Internal.field.handSelectorChanged(self.client.game.myself.handBoard)
 
     def checkTiles(self):
         """does the logical state match the displayed tiles?"""
@@ -511,7 +280,7 @@ class ClientDialog(QDialog):
 
     def placeInField(self):
         """place the dialog at bottom or to the right depending on space."""
-        field = InternalParameters.field
+        field = Internal.field
         cwi = field.centralWidget()
         view = field.centralView
         geometry = self.geometry()
@@ -562,80 +331,112 @@ class ClientDialog(QDialog):
     def selectButton(self, button=None):
         """select default answer. button may also be of type Message."""
         self.timer.stop()
-        if self.isVisible():
-            self.answered = True
-            if button is None:
-                button = self.focusWidget()
-            if isinstance(button, Message):
-                assert any(x.message == button for x in self.buttons)
-                answer = button
-            else:
-                answer = button.message
-            if not self.client.sayable[answer]:
-                Sorry(m18n('You cannot say %1', answer.i18nName))
-                return
-            self.deferred.callback(answer)
-        self.hide()
-        InternalParameters.field.clientDialog = None
+        self.answered = True
+        if button is None:
+            button = self.focusWidget()
+        if isinstance(button, Message):
+            assert any(x.message == button for x in self.buttons)
+            answer = button
+        else:
+            answer = button.message
+        if not self.client.sayable[answer]:
+            Sorry(m18n('You cannot say %1', answer.i18nName))
+            return
+        Internal.field.clientDialog = None
+        self.deferred.callback(answer)
 
     def selectedAnswer(self, dummyChecked):
         """the user clicked one of the buttons"""
-        if not self.client.game.autoPlay:
+        game = self.client.game
+        if game and not game.autoPlay:
             self.selectButton(self.sender())
-
-class AlreadyConnected(Exception):
-    """we already have a connection to the server"""
-    def __init__(self, url):
-        Exception.__init__(self, m18n('You are already connected to server %1', url))
 
 class HumanClient(Client):
     """a human client"""
     # pylint: disable=R0904
-    # disable warning about too many public methods
-    # pylint: disable=R0902
-    # we have 11 instance attributes, more than pylint likes
-
+    humanClients = []
     def __init__(self):
-        aiClass = self.__findAI([intelligence, altint], InternalParameters.AI)
+        aiClass = self.__findAI([intelligence, altint], Options.AI)
         if not aiClass:
-            raise Exception('intelligence %s is undefined' % InternalParameters.AI)
+            raise Exception('intelligence %s is undefined' % Options.AI)
         Client.__init__(self, intelligence=aiClass)
-        self.root = None
-        self.tableList = None
-        self.connector = None
+        HumanClient.humanClients.append(self)
         self.table = None
-        self.loginDialog = LoginDialog()
-        if InternalParameters.demo:
-            self.loginDialog.accept()
+        self.ruleset = None
+        self.beginQuestion = None
+        self.tableList = TableList(self)
+        Connection(self).login().addCallbacks(self.__loggedIn, self.__loginFailed)
+
+    @staticmethod
+    def shutdownHumanClients(exception=None):
+        """close connections to servers except maybe one"""
+        clients = HumanClient.humanClients
+        def done():
+            """return True if clients is cleaned"""
+            return len(clients) == 0 or (exception and clients == [exception])
+        def disconnectedClient(dummyResult, client):
+            """now the client is really disconnected from the server"""
+            if client in clients:
+                # HumanClient.serverDisconnects also removes it!
+                clients.remove(client)
+        if isinstance(exception, Failure):
+            logException(exception)
+        for client in clients[:]:
+            if client.tableList:
+                client.tableList.hide()
+        if done():
+            return succeed(None)
+        deferreds = []
+        for client in clients[:]:
+            if client != exception and client.connection:
+                deferreds.append(client.logout().addCallback(disconnectedClient, client))
+        return DeferredList(deferreds)
+
+    def __loggedIn(self, connection):
+        """callback after the server answered our login request"""
+        self.connection = connection
+        self.ruleset = connection.ruleset
+        self.name = connection.username
+        self.tableList.show()
+        voiceId = None
+        if Preferences.uploadVoice:
+            voice = Voice.locate(self.name)
+            if voice:
+                voiceId = voice.md5sum
+            if Debug.sound and voiceId:
+                logDebug('%s sends own voice %s to server' % (self.name, voiceId))
+        maxGameId = Query('select max(id) from game').records[0][0]
+        maxGameId = int(maxGameId) if maxGameId else 0
+        self.callServer('setClientProperties',
+            Internal.dbIdent,
+            voiceId, maxGameId, Internal.version).addCallbacks(self.__initTableList, self.__versionError)
+
+    def __initTableList(self, dummy):
+        """first load of the list. Process options like --demo, --table, --join"""
+        self.showTableList()
+        if SingleshotOptions.table:
+            Internal.autoPlay = False
+            self.__requestNewTableFromServer(SingleshotOptions.table).addCallback(
+                self.__showTables).addErrback(self.tableError)
+            if Debug.table:
+                logDebug('%s: --table lets us open an new table %d' % (self.name, SingleshotOptions.table))
+            SingleshotOptions.table = False
+        elif SingleshotOptions.join:
+            Internal.autoPlay = False
+            self.callServer('joinTable', SingleshotOptions.join).addCallback(
+                self.__showTables).addErrback(self.tableError)
+            if Debug.table:
+                logDebug('%s: --join lets us join table %s' % (self.name, self._tableById(SingleshotOptions.join)))
+            SingleshotOptions.join = False
+        elif not self.game and (Internal.autoPlay or (not self.tables and self.hasLocalServer())):
+            self.__requestNewTableFromServer().addCallback(self.__newLocalTable).addErrback(self.tableError)
         else:
-            if not self.loginDialog.exec_():
-                InternalParameters.field.startingGame = False
-                raise LoginAborted
-        self.useSocket = self.loginDialog.host == Query.localServerName
-        self.assertConnectivity()
-        self.username = self.loginDialog.username
-        self.__url = self.loginDialog.url
-        self.ruleset = self.__defineRuleset()
-        self.__msg = None # helper for delayed error messages
-        self.__checkExistingConnections()
-        self.login()
+            self.__showTables()
 
-    def __checkExistingConnections(self):
-        """do we already have a connection to the wanted URL?"""
-        for client in self.clients:
-            if client.connectedWithServer and client.url == self.__url:
-                client.callServer('sendTables').addCallback(client.tableList.gotTables)
-                client.tableList.activateWindow()
-                raise AlreadyConnected(self.__url)
-
-    def pingLater(self, dummyResult):
-        """ping the server every 5 seconds"""
-        InternalParameters.reactor.callLater(5, self.ping)
-
-    def ping(self):
-        """regularly check if server is still there"""
-        if self.connectedWithServer:
-            self.callServer('ping').addCallback(self.pingLater).addErrback(self.remote_serverDisconnects)
+    @staticmethod
+    def __loginFailed(dummy):
+        """as the name says"""
+        Internal.field.startingGame = False
 
     @staticmethod
     def __findAI(modules, aiName):
@@ -644,15 +445,6 @@ class HumanClient(Client):
             for key, value in modul.__dict__.items():
                 if key == 'AI' + aiName:
                     return value
-
-    def __defineRuleset(self):
-        """find out what ruleset to use"""
-        if InternalParameters.ruleset:
-            return InternalParameters.ruleset
-        elif InternalParameters.demo:
-            return Ruleset.selectableRulesets()[0]
-        else:
-            return self.loginDialog.cbRuleset.current
 
     def isRobotClient(self):
         """avoid using isinstance, it would import too much for kajonggserver"""
@@ -669,156 +461,99 @@ class HumanClient(Client):
 
     def hasLocalServer(self):
         """True if we are talking to a Local Game Server"""
-        return self.useSocket
-
-    @staticmethod
-    def findFreePort():
-        """find an unused port on the current system.
-        used when we want to start a local server on windows"""
-        for port in range(2000, 9000):
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1)
-            try:
-                sock.connect(('127.0.0.1', port))
-            except socket.error:
-                return port
-        logException('cannot find a free port')
-
-    def serverListening(self):
-        """is somebody listening on that port?"""
-        if self.useSocket and os.name != 'nt':
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            sock.settimeout(1)
-            try:
-                sock.connect(socketName())
-            except socket.error, exception:
-                if os.path.exists(socketName()):
-                    # try again, avoiding a race
-                    try:
-                        sock.connect(socketName())
-                    except socket.error, exception:
-                        if removeIfExists(socketName()):
-                            logInfo(m18n('removed stale socket <filename>%1</filename>', socketName()))
-                        logInfo('socket error:%s' % str(exception))
-                        return False
-                    else:
-                        return True
-            else:
-                return True
-        else:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1)
-            try:
-                sock.connect((self.loginDialog.host, self.loginDialog.port))
-            except socket.error:
-                return False
-            else:
-                return True
-
-    def assertConnectivity(self):
-        """make sure we have a running local server or network connectivity"""
-        if self.useSocket or self.loginDialog.url in ('localhost', '127.0.0.1'):
-            if not self.serverListening():
-                if os.name == 'nt':
-                    port = HumanClient.findFreePort()
-                else:
-                    port = None
-                self.startLocalServer(port)
-                # give the server up to 5 seconds time to start
-                for loop in range(50):
-                    if self.serverListening():
-                        break
-                    time.sleep(0.1)
-        elif which('qdbus'):
-            # the state of QtDBus is unclear to me.
-            # riverbank.computing says module dbus is deprecated
-            # for Python 3. And Ubuntu has no package with
-            # PyQt4.QtDBus. So we use good old subprocess.
-            answer = subprocess.Popen(['qdbus',
-                'org.kde.kded',
-                '/modules/networkstatus',
-                'org.kde.Solid.Networking.status'], stdout=subprocess.PIPE).communicate()[0].strip()
-            if answer != '4':
-                raise NetworkOffline(answer)
-
-    def startLocalServer(self, port):
-        """start a local server"""
-        try:
-            args = ['kajonggserver'] # the default
-            if sys.argv[0].endswith('kajongg.py'):
-                tryServer = sys.argv[0].replace('.py', 'server.py')
-                if os.path.exists(tryServer):
-                    args = ['python', tryServer]
-            if self.useSocket or os.name == 'nt':
-                args.append('--local')
-            if port:
-                args.append('--port=%d' % port)
-            if self.useSocket:
-                args.append('--db=%slocal.db' % appdataDir())
-            if Debug.argString:
-                args.append('--debug=%s' % Debug.argString)
-            if InternalParameters.socket:
-                args.append('--socket=%s' % InternalParameters.socket)
-            process = subprocess.Popen(args, shell=os.name=='nt')
-            if Debug.connections:
-                logDebug(m18n('started the local kajongg server: pid=<numid>%1</numid> %2',
-                    process.pid, ' '.join(args)))
-        except OSError, exc:
-            logException(exc)
+        return self.connection and self.connection.useSocket
 
     def __updateTableList(self):
         """if it exists"""
         if self.tableList:
             self.tableList.loadTables(self.tables)
 
+    def __showTables(self, dummy=None):
+        """load and show tables. We may be used as a callback. In that case,
+        clientTables is the id of a new table - which we do not need here"""
+        self.tableList.loadTables(self.tables)
+        self.tableList.show()
+
+    def showTableList(self, dummy=None):
+        """allocate it if needed"""
+        if not self.tableList:
+            self.tableList = TableList(self)
+        self.tableList.loadTables(self.tables)
+        self.tableList.activateWindow()
+
     def remote_tableRemoved(self, tableid, message, *args):
         """update table list"""
         Client.remote_tableRemoved(self, tableid, message, *args)
         self.__updateTableList()
         if message:
-            # do not tell me that I just logged out
-            if not self.username in args or not message.endswith('has logged out'):
+            if not self.name in args or not message.endswith('has logged out'):
                 logWarning(m18n(message, *args))
+
+    def __receiveTables(self, tables):
+        """now we already know all rulesets for those tables"""
+        Client.remote_newTables(self, tables)
+        if not Internal.autoPlay:
+            if self.hasLocalServer():
+                # when playing a local game, only show pending tables with
+                # previously selected ruleset
+                self.tables = list(x for x in self.tables if x.ruleset == self.ruleset)
+        if len(self.tables):
+            self.__updateTableList()
 
     def remote_newTables(self, tables):
         """update table list"""
-        Client.remote_newTables(self, tables)
-        self.__updateTableList()
+        assert len(tables)
+        def gotRulesets(result):
+            """the server sent us the wanted ruleset definitions"""
+            for ruleset in result:
+                Ruleset.cached(ruleset).save(copy=True) # make it known to the cache and save in db
+            return tables
+        rulesetHashes = set(x[1] for x in tables)
+        needRulesets = list(x for x in rulesetHashes if not Ruleset.hashIsKnown(x))
+        if needRulesets:
+            self.callServer('needRulesets', needRulesets).addCallback(gotRulesets).addCallback(self.__receiveTables)
+        else:
+            self.__receiveTables(tables)
 
-    def remote_tableChanged(self, table):
+    @staticmethod
+    def remote_needRuleset(ruleset):
+        """server only knows hash, needs full definition"""
+        result = Ruleset.cached(ruleset)
+        assert result and result.hash == ruleset
+        return result.toList()
+
+    def tableChanged(self, table):
         """update table list"""
-        newClientTable = ClientTable(self, *table) # pylint: disable=W0142
-        oldTable = self.tableById(newClientTable.tableid)
-        if oldTable:
-            # this happens if a game has more than one human player and
-            # one of them answers "no" to "are you ready to begin". In
-            # that case, the other clients need this code. Otherwise they
-            # would start the game anyway, and the user would have to abort it
-            if newClientTable.isOnline(self.username):
-                for name in newClientTable.playerNames:
-                    if name != self.username:
-                        if oldTable.isOnline(name) and not newClientTable.isOnline(name):
-                            Sorry(m18n('Player %1 has left the table', name)).addCallback(self.logout)
-            self.tables.remove(oldTable)
-            self.tables.append(newClientTable)
-            self.__updateTableList()
+        oldTable, newTable = Client.tableChanged(self, table)
+        if oldTable and oldTable == self.table:
+            # this happens if a table has more than one human player and
+            # one of them leaves the table. In that case, the other players
+            # need this code.
+            self.table = newTable
+            if len(newTable.playerNames) == 3:
+                # only tell about the first player leaving, because the
+                # others will then automatically leave too
+                for name in oldTable.playerNames:
+                    if name != self.name and not newTable.isOnline(name):
+                        def sorried(dummy):
+                            """user ack"""
+                            game = self.game
+                            if game:
+                                self.game = None
+                                return game.close()
+                        if self.beginQuestion:
+                            self.beginQuestion.cancel()
+                        Sorry(m18n('Player %1 has left the table', name)).addCallback(
+                            sorried).addCallback(self.showTableList)
+                        break
+        self.__updateTableList()
 
     def remote_chat(self, data):
         """others chat to me"""
         chatLine = ChatMessage(data)
         if Debug.chat:
             logDebug('got chatLine: %s' % chatLine)
-        if self.table:
-            table = self.table
-        else:
-            table = None
-            for _ in self.tableList.view.model().tables:
-                if _.tableid == chatLine.tableid:
-                    table = _
-            if table is None:
-                # TODO: chatting on a table with suspended game does
-                # not yet work because such a table has no tableid. Maybe it should.
-                return
+        table = self._tableById(chatLine.tableid)
         if not chatLine.isStatusMessage and not table.chatWindow:
             ChatWindow(table)
         if table.chatWindow:
@@ -828,45 +563,64 @@ class HumanClient(Client):
         """playerNames are in wind order ESWN"""
         def answered(result):
             """callback, called after the client player said yes or no"""
-            if self.connectedWithServer and result:
+            self.beginQuestion = None
+            if self.connection and result:
                 # still connected and yes, we are
-                return Client.readyForGameStart(self, tableid, gameid, wantedGame, playerNames, shouldSave)
+                Client.readyForGameStart(self, tableid, gameid, wantedGame, playerNames, shouldSave)
+                return Message.OK
             else:
-                return Message.NO
+                return Message.NoGameStart
+        def cancelled(dummy):
+            """the user does not want to start now. Back to table list"""
+            if Debug.table:
+                logDebug('%s: Readyforgamestart returns Message.NoGameStart for table %s' % (
+                    self.name, self._tableById(tableid)))
+            self.table = None
+            self.beginQuestion = None
+            if self.tableList:
+                self.__updateTableList()
+                self.tableList.show()
+            return Message.NoGameStart
         if sum(not x[1].startswith('Robot ') for x in playerNames) == 1:
             # we play against 3 robots and we already told the server to start: no need to ask again
             return Client.readyForGameStart(self, tableid, gameid, wantedGame, playerNames, shouldSave)
-        msg = m18n("The game can begin. Are you ready to play now?\n" \
-            "If you answer with NO, you will be removed from table %1.", tableid)
-        return QuestionYesNo(msg, caption=self.username).addCallback(answered)
+        assert not self.table
+        assert self.tables
+        self.table = self._tableById(tableid)
+        if not self.table:
+            raise pb.Error('client.readyForGameStart: tableid %d unknown' % tableid)
+        msg = m18n("The game on table <numid>%1</numid> can begin. Are you ready to play now?", tableid)
+        self.beginQuestion = QuestionYesNo(msg, modal=False, caption=self.name).addCallback(
+            answered).addErrback(cancelled)
+        return self.beginQuestion
 
     def readyForHandStart(self, playerNames, rotateWinds):
         """playerNames are in wind order ESWN. Never called for first hand."""
         def answered(dummy=None):
             """called after the client player said yes, I am ready"""
-            if self.connectedWithServer:
+            if self.connection:
                 return Client.readyForHandStart(self, playerNames, rotateWinds)
-        if not self.connectedWithServer:
+        if not self.connection:
             # disconnected meanwhile
             return
-        if InternalParameters.field:
+        if Internal.field:
             # update the balances in the status bar:
-            InternalParameters.field.updateGUI()
+            Internal.field.updateGUI()
         assert not self.game.isFirstHand()
         return Information(m18n("Ready for next hand?"), modal=False).addCallback(answered)
 
     def ask(self, move, answers):
         """server sends move. We ask the user. answers is a list with possible answers,
         the default answer being the first in the list."""
-        if not InternalParameters.field:
+        if not Internal.field:
             return Client.ask(self, move, answers)
-        self.computeSayable(move, answers)
+        self._computeSayable(move, answers)
         deferred = Deferred()
-        deferred.addCallback(self.answered)
-        deferred.addErrback(self.answerError, move, answers)
+        deferred.addCallback(self.__askAnswered)
+        deferred.addErrback(self.__answerError, move, answers)
         iAmActive = self.game.myself == self.game.activePlayer
         self.game.myself.handBoard.setEnabled(iAmActive)
-        field = InternalParameters.field
+        field = Internal.field
         oldDialog = field.clientDialog
         if oldDialog and not oldDialog.answered:
             raise Exception('old dialog %s:%s is unanswered, new Dialog: %s/%s' % (
@@ -882,7 +636,7 @@ class HumanClient(Client):
         field.clientDialog.askHuman(move, answers, deferred)
         return deferred
 
-    def selectChow(self, chows):
+    def __selectChow(self, chows):
         """which possible chow do we want to expose?
         Since we might return a Deferred to be sent to the server,
         which contains Message.Chow plus selected Chow, we should
@@ -900,7 +654,7 @@ class HumanClient(Client):
         assert selDlg.exec_()
         return deferred
 
-    def selectKong(self, kongs):
+    def __selectKong(self, kongs):
         """which possible kong do we want to declare?"""
         if self.game.autoPlay:
             return Message.Kong, self.intelligence.selectKong(kongs)
@@ -911,8 +665,10 @@ class HumanClient(Client):
         assert selDlg.exec_()
         return deferred
 
-    def answered(self, answer):
+    def __askAnswered(self, answer):
         """the user answered our question concerning move"""
+        if not self.game:
+            return Message.NoClaim
         myself = self.game.myself
         if answer in [Message.Discard, Message.OriginalCall]:
             # do not remove tile from hand here, the server will tell all players
@@ -920,17 +676,22 @@ class HumanClient(Client):
             myself.handBoard.setEnabled(False)
             return answer, myself.handBoard.focusTile.element
         args = self.sayable[answer]
-        if answer == Message.Chow:
-            return self.selectChow(args)
-        if answer == Message.Kong:
-            return self.selectKong(args)
         assert args
+        if answer == Message.Chow:
+            return self.__selectChow(args)
+        if answer == Message.Kong:
+            return self.__selectKong(args)
         self.game.hidePopups()
-        return answer, args
+        if args is True or args == []:
+            # this does not specify any tiles, the server does not need this. Robot players
+            # also return None in this case.
+            return answer
+        else:
+            return answer, args
 
-    def answerError(self, answer, move, answers):
+    def __answerError(self, answer, move, answers):
         """an error happened while determining the answer to server"""
-        logException('%s %s %s %s' % (self.game.myself.name, answer, move, answers))
+        logException('%s %s %s %s' % (self.game.myself.name if self.game else 'NOGAME', answer, move, answers))
 
     def remote_abort(self, tableid, message, *args):
         """the server aborted this game"""
@@ -942,8 +703,8 @@ class HumanClient(Client):
             if self.game:
                 self.game.close()
                 if self.game.autoPlay:
-                    if InternalParameters.field:
-                        InternalParameters.field.quit()
+                    if Internal.field:
+                        Internal.field.close()
 
     def remote_gameOver(self, tableid, message, *args):
         """the game is over"""
@@ -951,12 +712,12 @@ class HumanClient(Client):
             """now that the user clicked the 'game over' prompt away, clean up"""
             if self.game:
                 self.game.rotateWinds()
-                if InternalParameters.csv:
+                if Options.csv:
                     gameWinner = max(self.game.players, key=lambda x: x.balance)
-                    writer = csv.writer(open(InternalParameters.csv,'a'), delimiter=';')
+                    writer = csv.writer(open(Options.csv,'a'), delimiter=';')
                     if Debug.process:
                         self.game.csvTags.append('MEM:%s' % resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
-                    row = [InternalParameters.AI, str(self.game.seed), ','.join(self.game.csvTags)]
+                    row = [Options.AI, str(self.game.seed), ','.join(self.game.csvTags)]
                     for player in sorted(self.game.players, key=lambda x: x.name):
                         row.append(player.name.encode('utf-8'))
                         row.append(player.balance)
@@ -964,238 +725,116 @@ class HumanClient(Client):
                         row.append(1 if player == gameWinner else 0)
                     writer.writerow(row)
                     del writer
-                if self.game.autoPlay and InternalParameters.field:
-                    InternalParameters.field.quit()
+                if self.game.autoPlay and Internal.field:
+                    Internal.field.close()
                 else:
                     self.game.close().addCallback(Client.quitProgram)
         assert self.table and self.table.tableid == tableid
-        if InternalParameters.field:
+        if Internal.field:
             # update the balances in the status bar:
-            InternalParameters.field.updateGUI()
+            Internal.field.updateGUI()
         logInfo(m18n(message, *args), showDialog=True).addCallback(yes)
 
-    def remote_serverDisconnects(self, dummyResult=None):
+    def remote_serverDisconnects(self, result=None):
         """we logged out or or lost connection to the server.
         Remove visual traces depending on that connection."""
+        if Debug.connections and result:
+            logDebug('server %s disconnects: %s' % (self.connection.url, result))
+        self.connection = None
         game = self.game
         self.game = None # avoid races: messages might still arrive
         if self.tableList:
-            model = self.tableList.view.model()
-            if model:
-                for table in model.tables:
-                    if table.chatWindow:
-                        table.chatWindow.hide()
-                        table.chatWindow = None
             self.tableList.hide()
             self.tableList = None
-        if self in self.clients:
-            self.clients.remove(self)
-        field = InternalParameters.field
-        if field and field.game == game:
-            field.hideGame()
+        if self in HumanClient.humanClients:
+            HumanClient.humanClients.remove(self)
+        if self.beginQuestion:
+            self.beginQuestion.cancel()
+        field = Internal.field
+        if field and game and field.game == game:
+            game.close() # TODO: maybe issue a Sorry first?
 
-    def loginCommand(self, username):
-        """send a login command to server. That might be a normal login
-        or adduser/deluser/change passwd encoded in the username"""
-        factory = pb.PBClientFactory()
-        reactor = InternalParameters.reactor
-        if self.useSocket and os.name != 'nt':
-            self.connector = reactor.connectUNIX(socketName(), factory, timeout=2)
-        else:
-            self.connector = reactor.connectTCP(self.loginDialog.host, self.loginDialog.port, factory, timeout=5)
-        utf8Password = self.loginDialog.password.encode('utf-8')
-        utf8Username = username.encode('utf-8')
-        cred = credentials.UsernamePassword(utf8Username, utf8Password)
-        return factory.login(cred, client=self)
-
-    def adduser(self, url, name, passwd):
-        """create a user account"""
-        assert url is not None
-        if url != Query.localServerName:
-            adduserDialog = AddUserDialog(url,
-                self.loginDialog.username,
-                self.loginDialog.password)
-            if not adduserDialog.exec_():
-                raise Exception(m18n('Aborted creating a user account'))
-            passwd = adduserDialog.password
-        self.loginDialog.password = passwd
-        adduserCmd = SERVERMARK.join(['adduser', name, passwd])
-        return self.loginCommand(adduserCmd).addCallback(
-            self.adduserOK).addErrback(self._loginReallyFailed)
-
-    def _prettifyErrorMessage(self, failure):
-        """instead of just failure.getErrorMessage(), return something more user friendly.
-        That will be a localized error text, the original english text will be removed"""
-        url = self.url
-        message = failure.getErrorMessage()
-        match = re.search(r".*gaierror\(-\d, '(.*)'.*", message)
-        if not match:
-            match = re.search(r".*ConnectError\('(.*)',\)", message)
-        if not match:
-            match = re.search(r".*ConnectionRefusedError\('(.*)',\)", message)
-        if not match:
-            match = re.search(r".*DNS lookup.*\[Errno -5\] (.*)", message)
-            if match:
-                url = url.split(':')[0] # remove the port
-        # current twisted (version 12.3) returns different messages:
-        if not match:
-            match = re.search(r".*DNS lookup failed: address u'(.*)' not found.*", message)
-            if match:
-                return u'%s: %s' % (match.group(1), m18n('DNS lookup failed, address not found'))
-        if not match:
-            match = re.search(r".*DNS lookup.*\[Errno 110\] (.*)", message)
-        if not match:
-            match = re.search(r".*while connecting: 113: (.*)", message)
-        if match:
-            message = match.group(1).decode('string-escape').decode('string-escape')
-        return u'%s: %s' % (url, message.decode('utf-8'))
-
-    def _loginFailed(self, failure):
-        """login failed"""
-        def answered(result):
-            """user finally answered our question"""
-            if result:
-                return self.adduser(url, name, passwd)
-            else:
-                InternalParameters.field.startingGame = False
-        message = failure.getErrorMessage()
-        dlg = self.loginDialog
-        if 'Wrong username' in message:
-            url, name, passwd = dlg.url, dlg.username, dlg.password
-            host = url.split(':')[0]
-            if url == Query.localServerName:
-                return answered(True)
-            else:
-                msg = m18nc('USER is not known on SERVER',
-                    '%1 is not known on %2, do you want to open an account?', name, host)
-                return QuestionYesNo(msg).addCallback(answered)
-        else:
-            self._loginReallyFailed(failure)
-
-    def _loginReallyFailed(self, failure):
-        """login failed, not fixable by adding missing user"""
-        InternalParameters.field.startingGame = False
-        msg = self._prettifyErrorMessage(failure)
-        if 'Errno 5' in msg:
-            # The server is running but something is wrong with it
-            if self.useSocket and os.name != 'nt':
-                if removeIfExists(socketName()):
-                    logInfo(m18n('removed stale socket <filename>%1</filename>', socketName()))
-                msg += '\n\n\n' + m18n('Please try again')
-        logWarning(msg)
-
-    def adduserOK(self, dummyFailure):
-        """adduser succeeded"""
-        Players.createIfUnknown(self.username)
-        self.login()
-
-    def login(self):
-        """login to server"""
-        self.root = self.loginCommand(self.username)
-        self.root.addCallback(self.loggedIn).addErrback(self._loginFailed)
-
-    def __perspectiveDisconnected(self, remoteReference):
+    def serverDisconnected(self, dummyReference):
         """perspective calls us back"""
-        if Debug.traffic:
-            logDebug('perspective notifies disconnect: %s' % remoteReference)
-        self.connectedWithServer = False
-
-    def loggedIn(self, perspective):
-        """callback after the server answered our login request"""
-        perspective.notifyOnDisconnect(self.__perspectiveDisconnected)
-        self.perspective = perspective
-        self.connectedWithServer = True
-        self.tableList = TableList(self)
-        self.updateServerInfoInDatabase()
-        voiceId = None
-        if Preferences.uploadVoice:
-            voice = Voice.locate(self.username)
-            if voice:
-                voiceId = voice.md5sum
-            if Debug.sound and voiceId:
-                logDebug('%s sends own voice %s to server' % (self.username, voiceId))
-        maxGameId = Query('select max(id) from game').records[0][0]
-        maxGameId = int(maxGameId) if maxGameId else 0
-        self.callServer('setClientProperties',
-            InternalParameters.dbIdent,
-            voiceId, maxGameId, InternalParameters.version). \
-                addErrback(self.versionError). \
-                addCallback(self.callServer, 'sendTables'). \
-                addCallback(self.tableList.gotTables)
-        self.ping()
+        if self.connection and (Debug.traffic or Debug.connections):
+            logDebug('perspective notifies disconnect: %s' % self.connection.url)
+        self.remote_serverDisconnects()
 
     @staticmethod
-    def versionError(err):
+    def __versionError(err):
         """log the twisted error"""
         logWarning(err.getErrorMessage())
-        InternalParameters.field.abortGame()
+        Internal.field.abortGame()
         return err
 
-    def updateServerInfoInDatabase(self):
-        """we are online. Update table server."""
-        lasttime = datetime.datetime.now().replace(microsecond=0).isoformat()
-        url = english(self.url) # use unique name for Local Game
-        with Transaction():
-            serverKnown = Query('update server set lastname=?,lasttime=? where url=?',
-                list([self.username, lasttime, url])).rowcount() == 1
-            if not serverKnown:
-                Query('insert into server(url,lastname,lasttime) values(?,?,?)',
-                    list([url, self.username, lasttime]))
-        # needed if the server knows our name but our local data base does not:
-        Players.createIfUnknown(self.username)
-        playerId = Players.allIds[self.username]
-        with Transaction():
-            if Query('update passwords set password=? where url=? and player=?',
-                list([self.loginDialog.password, url, playerId])).rowcount() == 0:
-                Query('insert into passwords(url,player,password) values(?,?,?)',
-                    list([url, playerId, self.loginDialog.password]))
+    @staticmethod
+    def __wantedGame():
+        """find out which game we want to start on the table"""
+        result = SingleshotOptions.game
+        if not result or result == '0':
+            result = str(int(random.random() * 10**9))
+        SingleshotOptions.game = None
+        return result
 
-    @apply
-    def host():
-        """the host name of the server"""
-        def fget(self):
-            if not self.connector:
-                return None
-            dest = self.connector.getDestination()
-            if isinstance(dest, UNIXAddress):
-                return Query.localServerName
-            else:
-                return dest.host
-        return property(**locals())
+    def tableError(self, err):
+        """log the twisted error"""
+        if not self.connection:
+            # lost connection to server
+            if self.tableList:
+                self.tableList.hide()
+                self.tableList = None
+        else:
+            logWarning(err.getErrorMessage())
 
-    @apply
-    def port():
-        """the port name of the server"""
-        def fget(self):
-            if not self.connector:
-                return None
-            dest = self.connector.getDestination()
-            if isinstance(dest, UNIXAddress):
-                return None
-            else:
-                return dest.port
-        return property(**locals())
+    def __newLocalTable(self, newId):
+        """we just got newId from the server"""
+        return self.callServer('startGame', newId).addErrback(self.tableError)
 
-    @apply
-    def url():
-        """the url of the server"""
-        def fget(self):
-            # pylint: disable=W0212
-            if not self.connector:
-                return None
-            return self.__url
-        return property(**locals())
+    def __requestNewTableFromServer(self, tableid=None, ruleset=None):
+        """as the name says"""
+        if ruleset is None:
+            ruleset = self.ruleset
+        return self.callServer('newTable', ruleset.hash, Options.playOpen,
+            Internal.autoPlay, self.__wantedGame(), tableid).addErrback(self.tableError)
+
+    def newTable(self):
+        """TableList uses me as a slot"""
+        if Options.ruleset:
+            ruleset = Options.ruleset
+        elif self.hasLocalServer():
+            ruleset = self.ruleset
+        else:
+            selectDialog = SelectRuleset(self.connection.url)
+            if not selectDialog.exec_():
+                return
+            ruleset = selectDialog.cbRuleset.current
+        deferred = self.__requestNewTableFromServer(ruleset=ruleset)
+        if self.hasLocalServer():
+            deferred.addCallback(self.__newLocalTable)
+        self.tableList.requestedNewTable = True
+
+    def joinTable(self, table=None):
+        """join a table"""
+        if not isinstance(table, ClientTable):
+            table = self.tableList.selectedTable()
+        self.callServer('joinTable', table.tableid).addErrback(self.tableError)
 
     def logout(self, dummyResult=None):
         """clean visual traces and logout from server"""
-        result = None
-        if self.connectedWithServer:
-            result = self.callServer('logout')
-        return result or succeed(None)
+        def loggedout(result, connection):
+            """TODO: do we need this?"""
+            connection.connector.disconnect()
+            return result
+        if self.connection:
+            conn = self.connection
+            self.connection = None
+            return self.callServer('logout').addCallback(loggedout, conn)
+        else:
+            return succeed(None)
 
     def callServer(self, *args):
         """if we are online, call server"""
-        if self.connectedWithServer:
+        if self.connection:
             if args[0] is None:
                 args = args[1:]
             try:
@@ -1204,13 +843,20 @@ class HumanClient(Client):
                         self.game.debug('callServer(%s)' % repr(args))
                     else:
                         logDebug('callServer(%s)' % repr(args))
-                return self.perspective.callRemote(*args)
+                def callServerError(result):
+                    """if serverDisconnected has been called meanwhile, just ignore msg about
+                    connection lost in a non-clean fashion"""
+                    if self.connection:
+                        return result
+                return self.connection.perspective.callRemote(*args).addErrback(callServerError)
             except pb.DeadReferenceError:
                 logWarning(m18n('The connection to the server %1 broke, please try again later.',
-                                  self.url))
+                                  self.connection.url))
                 self.remote_serverDisconnects()
                 return succeed(None)
+        else:
+            return succeed(None)
 
     def sendChat(self, chatLine):
         """send chat message to server"""
-        return self.callServer('chat', chatLine.serialize())
+        return self.callServer('chat', chatLine.asList())

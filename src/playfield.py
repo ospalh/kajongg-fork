@@ -20,8 +20,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 import sys
 import os
-from util import logError, m18n, m18nc, logWarning
-from common import WINDS, LIGHTSOURCES, InternalParameters, Preferences, isAlive
+from util import logError, m18n, m18nc, logWarning, logDebug
+from common import WINDS, LIGHTSOURCES, Options, Internal, Preferences, isAlive
 import cgitb, tempfile, webbrowser
 from twisted.internet.defer import succeed, fail
 
@@ -48,15 +48,15 @@ try:
     from PyQt4.QtGui import QGridLayout, QAction
     from PyQt4.QtGui import QComboBox, QSlider, QHBoxLayout, QLabel
     from PyQt4.QtGui import QVBoxLayout, QSpacerItem, QSizePolicy, QCheckBox
-except ImportError, importError:
+except ImportError as importError:
     NOTFOUND.append('Package python-qt4: PyQt4: %s' % importError)
 
 try:
     from zope.interface import implements # pylint: disable=W0611
-except ImportError, importError:
+except ImportError as importError:
     NOTFOUND.append('Package python-zope-interface missing: %s' % importError)
 
-from kde import Sorry, QuestionYesNo, KIcon, KAction, KApplication, KToggleFullScreenAction, \
+from kde import QuestionYesNo, KIcon, KAction, KApplication, KToggleFullScreenAction, \
     KXmlGuiWindow, KConfigDialog, KStandardAction
 
 try:
@@ -74,7 +74,7 @@ try:
     from scoring import ExplainView, ScoringDialog, ScoreTable
     from tables import SelectRuleset
     from client import Client
-    from humanclient import HumanClient, AlreadyConnected, LoginAborted, NetworkOffline
+    from humanclient import HumanClient
     from rulesetselector import RulesetSelector
     from tilesetselector import TilesetSelector
     from backgroundselector import BackgroundSelector
@@ -84,8 +84,9 @@ try:
     from player import Player, Players
     from game import ScoringGame
     from chat import ChatWindow
+    from message import Message
 
-except ImportError, importError:
+except ImportError as importError:
     NOTFOUND.append('kajongg is not correctly installed: modules: %s' % importError)
 
 if len(NOTFOUND):
@@ -186,9 +187,9 @@ class SwapDialog(QMessageBox):
         return self.clickedButton() == self.yesAnswer
 
 class SelectPlayers(SelectRuleset):
-    """a dialog for selecting four players"""
+    """a dialog for selecting four players. Used only for scoring game."""
     def __init__(self, game):
-        SelectRuleset.__init__(self, game.client.host if game and game.client else None)
+        SelectRuleset.__init__(self)
         self.game = game
         Players.load()
         self.setWindowTitle(m18n('Select four players') + ' - Kajongg')
@@ -199,7 +200,6 @@ class SelectPlayers(SelectRuleset):
             cbName.manualSelect = False
             # increase width, we want to see the full window title
             cbName.setMinimumWidth(350) # is this good for all platforms?
-            # add all player names belonging to no host
             cbName.addItems(Players.humanNames.values())
             self.grid.addWidget(cbName, idx+1, 1)
             self.nameWidgets.append(cbName)
@@ -270,9 +270,18 @@ class VisiblePlayer(Player):
 
     def hasManualScore(self):
         """True if no tiles are assigned to this player"""
-        if InternalParameters.field.scoringDialog:
-            return InternalParameters.field.scoringDialog.spValues[self.idx].isEnabled()
+        if Internal.field.scoringDialog:
+            return Internal.field.scoringDialog.spValues[self.idx].isEnabled()
         return False
+
+    @property
+    def handTotal(self):
+        """the hand total of this player"""
+        if self.hasManualScore():
+            spValue = Internal.field.scoringDialog.spValues[self.idx]
+            return spValue.value()
+        else:
+            return Player.handTotal.fget(self)
 
     def syncHandBoard(self, adding=None):
         """update display of handBoard. Set Focus to tileName."""
@@ -284,11 +293,22 @@ class VisiblePlayer(Player):
         self.removeMeld(meld)
         self.addMeld(meld)
 
+    def sortMeldsByX(self):
+        """sorts the melds by their position on screen"""
+        if self.game.isScoringGame():
+            # in a real game, the player melds do not have tiles
+            self._concealedMelds = sorted(self._concealedMelds, key=lambda x: x[0].xoffset)
+            self._exposedMelds = sorted(self._exposedMelds, key=lambda x: x[0].xoffset)
+
     def colorizeName(self):
         """set the color to be used for showing the player name on the wall"""
+        if not isAlive(self.front.nameLabel):
+            # TODO: should never happen
+            logDebug('colirizeName: nameLabel is not alive')
+            return
         if self == self.game.activePlayer and self.game.client:
             color = Qt.blue
-        elif InternalParameters.field.tilesetName == 'jade':
+        elif Internal.field.tilesetName == 'jade':
             color = Qt.white
         else:
             color = Qt.black
@@ -301,7 +321,7 @@ class VisiblePlayer(Player):
 
     def refreshManualRules(self, sender=None):
         """update status of manual rules"""
-        assert InternalParameters.field
+        assert Internal.field
         if not self.handBoard:
             # might happen at program exit
             return
@@ -333,7 +353,7 @@ class VisiblePlayer(Player):
             wonChar = 'M'
         else:
             wonChar = 'm'
-        lastTile = InternalParameters.field.computeLastTile()
+        lastTile = Internal.field.computeLastTile()
         if lastTile and lastTile.istitle():
             lastSource = 'w'
         else:
@@ -356,10 +376,10 @@ class VisiblePlayer(Player):
         """compile hand info into a string as needed by the scoring engine"""
         if not asWinner and self != self.game.winner:
             return ''
-        lastTile = InternalParameters.field.computeLastTile()
+        lastTile = Internal.field.computeLastTile()
         if not lastTile:
             return ''
-        return 'L%s%s' % (lastTile, InternalParameters.field.computeLastMeld().joined)
+        return 'L%s%s' % (lastTile, Internal.field.computeLastMeld().joined)
 
     def computeHand(self, withTile=None, robbedTile=None, singleRule=None, asWinner=False):
         """returns a Hand object, using a cache"""
@@ -380,10 +400,10 @@ class VisiblePlayer(Player):
 
     def popupMsg(self, msg):
         """shows a yellow message from player"""
-        if msg != 'No Claim':
-            self.speak(msg.lower())
+        if msg != Message.NoClaim:
+            self.speak(msg.name.lower())
             yellow = self.front.message
-            yellow.setText('  '.join([unicode(yellow.msg), m18nc('kajongg', msg)]))
+            yellow.setText('  '.join([unicode(yellow.msg), m18nc('kajongg', msg.name)]))
             yellow.setVisible(True)
 
     def hidePopup(self):
@@ -404,14 +424,14 @@ class PlayField(KXmlGuiWindow):
 
     def __init__(self):
         # see http://lists.kde.org/?l=kde-games-devel&m=120071267328984&w=2
-        InternalParameters.field = self
+        Internal.field = self
         self.game = None
         self.__startingGame = False
         self.ignoreResizing = 1
         super(PlayField, self).__init__()
         self.background = None
         self.showShadows = None
-        self.clientDialog = None
+        self._clientDialog = None
 
         self.playerWindow = None
         self.rulesetWindow = None
@@ -427,6 +447,21 @@ class PlayField(KXmlGuiWindow):
         for action in self.toolBar().actions():
             if 'onfigure' in action.text():
                 action.setPriority(QAction.LowPriority)
+        if Options.host:
+            self.playGame()
+
+    @property
+    def clientDialog(self):
+        """wrapper: hide dialog when it is set to None"""
+        return self._clientDialog
+
+    @clientDialog.setter
+    def clientDialog(self, value):
+        """wrapper: hide dialog when it is set to None"""
+        if isAlive(self._clientDialog) and not value:
+            self._clientDialog.timer.stop()
+            self._clientDialog.hide()
+        self._clientDialog = value
 
     def sizeHint(self):
         """give the main window a sensible default size"""
@@ -468,7 +503,7 @@ class PlayField(KXmlGuiWindow):
         if self.scoringDialog:
             self.scoringDialog.slotInputChanged()
         if self.game and not self.game.finished():
-            self.game.wall.decoratePlayer(handBoard.player)
+            self.game.wall.decoratePlayer(handBoard.player) # pylint: disable=E1101
         # first decorate walls - that will compute player.handBoard for explainView
         if self.explainView:
             self.explainView.refresh(self.game)
@@ -532,7 +567,7 @@ class PlayField(KXmlGuiWindow):
         self.actionPlayGame = self.__kajonggAction("play", "arrow-right", self.playGame, Qt.Key_N)
         self.actionAbortGame = self.__kajonggAction("abort", "dialog-close", self.abortAction, Qt.Key_W)
         self.actionAbortGame.setEnabled(False)
-        self.actionQuit = self.__kajonggAction("quit", "application-exit", self.quit, Qt.Key_Q)
+        self.actionQuit = self.__kajonggAction("quit", "application-exit", self.close, Qt.Key_Q)
         self.actionPlayers = self.__kajonggAction("players", "im-user", self.slotPlayers)
         self.actionRulesets = self.__kajonggAction("rulesets", "games-kajongg-law", self.slotRulesets)
         self.actionChat = self.__kajonggToggleAction("chat", "call-start",
@@ -558,12 +593,12 @@ class PlayField(KXmlGuiWindow):
         self.actionAutoPlay = self.__kajonggAction("demoMode", "arrow-right-double", None, Qt.Key_D)
         self.actionAutoPlay.setCheckable(True)
         self.actionAutoPlay.toggled.connect(self.__toggleDemoMode)
-        self.actionAutoPlay.setChecked(InternalParameters.demo)
+        self.actionAutoPlay.setChecked(Internal.autoPlay)
         QMetaObject.connectSlotsByName(self)
 
     def showWall(self):
         """shows the wall according to the game rules (lenght may vary)"""
-        UIWall(self.game)
+        UIWall(self.game)   # sets self.game.wall
         if self.discardBoard:
             # scale it such that it uses the place within the wall optimally.
             # we need to redo this because the wall length can vary between games.
@@ -585,62 +620,41 @@ class PlayField(KXmlGuiWindow):
 
     def abort(self):
         """abort current game"""
-        def gotAnswer(result):
+        def gotAnswer(result, autoPlaying):
             """user answered"""
             if result:
                 return self.abortGame()
             else:
-                self.actionAutoPlay.setChecked(demoMode)
+                self.actionAutoPlay.setChecked(autoPlaying)
                 return fail(Exception('no abort'))
+        def gotError(result):
+            """abortGame failed"""
+            logDebug('abortGame error:%s/%s ' % (str(result), result.getErrorMessage()))
         if not self.game:
             self.startingGame = False
             return succeed(None)
-        demoMode = self.actionAutoPlay.isChecked()
+        autoPlaying = self.actionAutoPlay.isChecked()
         self.actionAutoPlay.setChecked(False)
         if self.game.finished():
             return self.abortGame()
         else:
-            return QuestionYesNo(m18n("Do you really want to abort this game?"), always=True).addCallback(gotAnswer)
-
-    def quit(self):
-        """exit the application"""
-        def doNotQuit(dummy):
-            """ignore failure to abort"""
-        deferred = self.abort()
-        deferred.addCallback(Client.shutdownClients).addCallback(Client.quitProgram).addErrback(doNotQuit)
-        return deferred
-
-    def hideGame(self, dummyResult=None):
-        """remove all visible traces of the current game"""
-        self.setWindowTitle('Kajongg')
-        self.discardBoard.hide()
-        self.selectorBoard.tiles = []
-        self.selectorBoard.allSelectorTiles = []
-        self.centralScene.removeTiles()
-        if self.clientDialog:
-            self.clientDialog.hide()
-            self.clientDialog = None
-        if self.game:
-            self.game.removeGameFromPlayfield()
-            self.game = None
-        self.updateGUI()
+            return QuestionYesNo(m18n("Do you really want to abort this game?"), always=True).addCallback(
+                gotAnswer, autoPlaying).addErrback(gotError)
 
     def abortGame(self):
         """if a game is active, abort it"""
-        self.actionAutoPlay.setChecked(False)
-        self.startingGame = False
         if self.game is None: # meanwhile somebody else might have aborted
             return succeed(None)
-        if self.game.isScoringGame():
-            self.hideGame()
-            return succeed(None)
-        else:
-            return self.game.close()
+        game = self.game
+        self.game = None
+        return game.close()
 
     def closeEvent(self, event):
         """somebody wants us to close, maybe ALT-F4 or so"""
-        if not self.quit():
-            event.ignore()
+        event.ignore()
+        def doNotQuit(dummy):
+            """ignore failure to abort"""
+        self.abort().addCallback(HumanClient.shutdownHumanClients).addCallbacks(Client.quitProgram, doNotQuit)
 
     def __moveTile(self, tile, wind, lowerHalf):
         """the user pressed a wind letter or X for center, wanting to move a tile there"""
@@ -792,19 +806,12 @@ class PlayField(KXmlGuiWindow):
     def playGame(self):
         """play a remote game: log into a server and show its tables"""
         self.startingGame = True
-        try:
-            HumanClient()
-        except AlreadyConnected:
-            pass
-        except LoginAborted:
-            pass
-        except NetworkOffline, exception:
-            Sorry(m18n('You have no network connection (error code %1).', str(exception)))
+        HumanClient()
 
     def adjustView(self):
         """adjust the view such that exactly the wanted things are displayed
         without having to scroll"""
-        if not InternalParameters.scaleScene:
+        if not Internal.scaleScene:
             return
         if self.game:
             with Animated(False):
@@ -823,38 +830,39 @@ class PlayField(KXmlGuiWindow):
         if oldRect != newRect:
             view.fitInView(scene.itemsBoundingRect(), Qt.KeepAspectRatio)
 
-    @apply
-    def startingGame(): # pylint: disable=E0202
+    @property
+    def startingGame(self):
         """are we trying to start a game?"""
-        # pylint: disable=W0212
-        def fget(self):
-            return self.__startingGame
-        def fset(self, value):
-            if value != self.__startingGame:
-                self.__startingGame = value
-                self.updateGUI()
-        return property(**locals())
+        return self.__startingGame
 
-    @apply
-    def tilesetName(): # pylint: disable=E0202
+    @startingGame.setter
+    def startingGame(self, value):
+        """are we trying to start a game?"""
+        if value != self.__startingGame:
+            self.__startingGame = value
+            self.updateGUI()
+
+    @property
+    def tilesetName(self):
         """the name of the current tileset"""
-        def fget(self):
-            return self.tileset.desktopFileName
-        def fset(self, name):
-            self.tileset = Tileset(name)
-        return property(**locals())
+        return self.tileset.desktopFileName
 
-    @apply
-    def backgroundName(): # pylint: disable=E0202
+    @tilesetName.setter
+    def tilesetName(self, name):
+        """the name of the current tileset"""
+        self.tileset = Tileset(name)
+
+    @property
+    def backgroundName(self):
         """setting this also actually changes the background"""
-        def fget(self):
-            return self.background.desktopFileName if self.background else ''
-        def fset(self, name):
-            """setter for backgroundName"""
-            self.background = Background(name)
-            self.background.setPalette(self.centralWidget())
-            self.centralWidget().setAutoFillBackground(True)
-        return property(**locals())
+        return self.background.desktopFileName if self.background else ''
+
+    @backgroundName.setter
+    def backgroundName(self, name):
+        """setter for backgroundName"""
+        self.background = Background(name)
+        self.background.setPalette(self.centralWidget())
+        self.centralWidget().setAutoFillBackground(True)
 
     def applySettings(self):
         """apply preferences"""
@@ -952,7 +960,7 @@ class PlayField(KXmlGuiWindow):
                 self.clientDialog.proposeAction() # an illegal action might have focus
                 self.clientDialog.selectButton() # select default, abort timeout
         else:
-            InternalParameters.demo = checked
+            Internal.autoPlay = checked
             if checked:
                 # TODO: use the last used ruleset. Right now it always takes the first of the list.
                 self.playGame()
@@ -974,17 +982,26 @@ class PlayField(KXmlGuiWindow):
         self.game.maybeRotateWinds()
         self.game.prepareHand()
         self.game.initHand()
-        self.scoringDialog.clearLastTileCombo()
 
     def prepareHand(self):
         """redecorate wall"""
         self.updateGUI()
         if self.game:
             self.game.wall.decorate()
+        if self.scoringDialog:
+            self.scoringDialog.clearLastTileCombo()
 
     def updateGUI(self):
         """update some actions, all auxiliary windows and the statusbar"""
+        if not isAlive(self):
+            return
+        title = ''
+        connections = list(x.connection for x in HumanClient.humanClients if x.connection)
         game = self.game
+        if not game:
+            title = ', '.join('{name}/{url}'.format(name=x.username, url=x.url) for x in connections)
+            if title:
+                self.setWindowTitle('%s - Kajongg' % title)
         for action in [self.actionScoreGame, self.actionPlayGame]:
             action.setEnabled(not bool(game))
         self.actionAbortGame.setEnabled(bool(game))
@@ -1016,7 +1033,7 @@ class PlayField(KXmlGuiWindow):
         if self.game: # might be finished meanwhile
             with Animated(False):
                 wall = self.game.wall
-                oldIdx = LIGHTSOURCES.index(wall.lightSource)
+                oldIdx = LIGHTSOURCES.index(wall.lightSource) # pylint: disable=E1101
                 newLightSource = LIGHTSOURCES[(oldIdx + 1) % 4]
                 wall.lightSource = newLightSource
                 self.selectorBoard.lightSource = newLightSource

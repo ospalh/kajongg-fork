@@ -20,15 +20,16 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 import datetime
 
-from util import m18n, m18nc, m18ncE, logWarning, logException, logDebug, SERVERMARK
+from util import m18n, m18nc, m18ncE, logWarning, logException, logDebug
 from sound import Voice, Sound
 from meld import Meld
-from common import InternalParameters, Debug
+from common import Internal, Debug
+from kde import Sorry
 
 # pylint: disable=W0231
 # multiple inheritance: pylint thinks ServerMessage.__init__ does not get called.
 # this is no problem: ServerMessage has no __init__ and its parent Message.__init__
-# will be called via the other path thru ClientMessage
+# will be called anyway
 
 class Message(object):
     """those are the message types between client and server. They have no state
@@ -44,12 +45,15 @@ class Message(object):
         # do not use a numerical value because that could easier
         # change with software updates
         Message.defined[self.name] = self
+        className = self.__class__.__name__.replace('Message', '')
+        msgName = self.name.replace(' ', '')
+        assert className ==  msgName, '%s != %s' % ( className, msgName)
 
     def __str__(self):
         return self.name
 
     def __repr__(self):
-        return "<Message: %s>" % self
+        return self.name
 
 class ServerMessage(Message):
     """those classes are used for messages from server to client"""
@@ -66,7 +70,6 @@ class ClientMessage(Message):
     def __init__(self, name=None, shortcut=None):
         Message.__init__(self, name, shortcut)
         self.i18nName = m18nc('kajongg', self.name)
-        self.notifyAtOnce = False
 
     def buttonCaption(self):
         """localized, with a & for the shortcut"""
@@ -92,11 +95,28 @@ class ClientMessage(Message):
         table.abort(errMsg)
 
 class NotifyAtOnceMessage(ClientMessage):
-    """those classes are for messages that should pop up at the
-    other clients right away"""
-    def __init__(self, name, shortcut=None):
+    """those classes are for messages from clients that might have to be relayed to the
+    other clients right away.
+
+    Example: If a client says Pung, it sends Message.Pung with the flag 'notifying=True'.
+    This is relayed to the other 3 clients, helping them in their thinking. When the
+    server decides that the Pung is actually to be executed, it sends Message.Pung
+    to all 4 clients, but without 'notifying=True'"""
+
+    sendScore = False
+    def __init__(self, name=None, shortcut=None):
         ClientMessage.__init__(self, name, shortcut)
-        self.notifyAtOnce = True
+
+    def notifyAction(self, dummyClient, move):
+        """the default action for immediate notifications"""
+        move.player.popupMsg(self)
+
+    @staticmethod
+    def receivers(deferredBlock):
+        """who should get the notification? Default is all players except the
+        player who triggered us"""
+        game = deferredBlock.table.game
+        return list(x for x in game.players if x != game.activePlayer)
 
 class PungChowMessage(NotifyAtOnceMessage):
     """common code for Pung and Chow"""
@@ -287,7 +307,7 @@ class MessageDiscard(ClientMessage, ServerMessage):
         return txt, warn, txt
     def clientAction(self, client, move):
         """execute the discard locally"""
-        if client.isHumanClient() and InternalParameters.field:
+        if client.isHumanClient() and Internal.field:
             move.player.handBoard.setEnabled(False)
         move.player.speak(move.tile)
         return client.game.hasDiscarded(move.player, move.tile)
@@ -302,19 +322,44 @@ class MessageProposeGameId(ServerMessage):
         # we cannot just use table.playerNames - the seating order is now different (random)
         return client.reserveGameId(move.gameid)
 
+class MessageTableChanged(ServerMessage):
+    """somebody joined or left a table"""
+    needsGame = False
+    def clientAction(self, client, move):
+        """update our copy"""
+        return client.tableChanged(move.source)
+
 class MessageReadyForGameStart(ServerMessage):
     """the game server asks us if we are ready for game start"""
     needsGame = False
     def clientAction(self, client, move):
         """ask the client"""
-        def hideTableList(dummy):
+        def hideTableList(result):
             """hide it only after player says I am ready"""
-            if client.tableList:
+            if result == Message.OK and client.tableList:
+                if Debug.table:
+                    logDebug('%s hiding table list because game started' % client.name)
                 client.tableList.hide()
+            return result
         # move.source are the players in seating order
         # we cannot just use table.playerNames - the seating order is now different (random)
         return client.readyForGameStart(move.tableid, move.gameid,
             move.wantedGame, move.source, shouldSave=move.shouldSave).addCallback(hideTableList)
+
+class MessageNoGameStart(NotifyAtOnceMessage):
+    """the client says he does not want to start the game after all"""
+    needsGame = False
+    def notifyAction(self, client, move):
+        if client.beginQuestion or client.game:
+            Sorry(m18n('%1 is not ready to start the game', move.player.name))
+        if client.beginQuestion:
+            client.beginQuestion.cancel()
+        elif client.game:
+            return client.game.close()
+    @staticmethod
+    def receivers(deferredBlock):
+        """no Claim notifications are not needed for those who already said no Claim"""
+        return list(x.player for x in deferredBlock.requests if x.answer != Message.NoGameStart)
 
 class MessageReadyForHandStart(ServerMessage):
     """the game server asks us if we are ready for a new hand"""
@@ -328,8 +373,9 @@ class MessageInitHand(ServerMessage):
         """prepare a new hand"""
         client.game.divideAt = move.divideAt
         client.game.wall.divide()
-        client.shutdownClients(exception=client)
-        field = InternalParameters.field
+        if hasattr(client,'shutdownHumanClients'):
+            client.shutdownHumanClients(exception=client)
+        field = Internal.field
         if field:
             field.setWindowTitle(m18n('Kajongg <numid>%1</numid>', client.game.handId()))
             field.discardBoard.setRandomPlaces(client.game.randomGenerator)
@@ -353,18 +399,13 @@ class MessageSaveHand(ServerMessage):
         """save the hand"""
         return client.game.saveHand()
 
-class MessagePopupMsg(ServerMessage):
-    """the game server tells us to show a popup for a player"""
-    def clientAction(self, dummyClient, move):
-        """popup the message"""
-        return move.player.popupMsg(move.msg)
-
 class MessageAskForClaims(ServerMessage):
     """the game server asks us if we want to claim a tile"""
     def clientAction(self, client, move):
         """ask the player"""
-        if not client.thatWasMe(move.player):
-            return client.ask(move, [Message.NoClaim, Message.Chow, Message.Pung, Message.Kong, Message.MahJongg])
+        if client.thatWasMe(move.player):
+            raise Exception('Server asked me(%s) for claims but I just discarded that tile!' % move.player)
+        return client.ask(move, [Message.NoClaim, Message.Chow, Message.Pung, Message.Kong, Message.MahJongg])
 
 class MessagePickedTile(ServerMessage):
     """the game server tells us who picked a tile"""
@@ -384,11 +425,13 @@ class MessageActivePlayer(ServerMessage):
         """set the active player"""
         client.game.activePlayer = move.player
 
-class MessageViolatedOriginalCall(ServerMessage):
+class MessageViolatesOriginalCall(ServerMessage):
     """the game server tells us who violated an original call"""
+    def __init__(self):
+        ServerMessage.__init__(self, name=m18ncE('kajongg', 'Violates Original Call'))
     def clientAction(self, client, move):
         """violation: player may not say mah jongg"""
-        move.player.popupMsg(m18n('Violates Original Call'))
+        move.player.popupMsg(self)
         move.player.mayWin = False
         if Debug.originalCall:
             logDebug('%s: cleared mayWin' % move.player)
@@ -476,43 +519,46 @@ class MessageCalling(ServerMessage):
     """the game server tells us who announced a calling hand"""
     def clientAction(self, client, move):
         """tell user and save this information locally"""
-        move.player.popupMsg(m18n('Calling'))
+        move.player.popupMsg(self)
         move.player.isCalling = True
         # otherwise we have a visible artifact of the discarded tile.
         # Only when animations are disabled. Why?
-        if InternalParameters.field:
-            InternalParameters.field.centralView.resizeEvent(None)
+        if Internal.field:
+            Internal.field.centralView.resizeEvent(None)
         return client.ask(move, [Message.OK])
 
-class MessagePlayedDangerous(ServerMessage):
+class MessageDangerousGame(ServerMessage):
     """the game server tells us who played dangerous game"""
+    def __init__(self):
+        ServerMessage.__init__(self, name=m18ncE('kajongg', 'Dangerous Game'))
     def clientAction(self, client, move):
         """mirror the dangerous game action locally"""
-        move.player.popupMsg(m18n('Dangerous Game'))
+        move.player.popupMsg(self)
         move.player.playedDangerous = True
         return client.ask(move, [Message.OK])
 
-class MessageHasNoChoice(ServerMessage):
+class MessageNoChoice(ServerMessage):
     """the game server tells us who had no choice avoiding dangerous game"""
     def __init__(self):
-        ServerMessage.__init__(self)
+        ServerMessage.__init__(self, name=m18ncE('kajongg', 'No Choice'))
         self.move = None
 
     def clientAction(self, client, move):
         """mirror the no choice action locally"""
         self.move = move
-        move.player.popupMsg(m18n('No Choice'))
+        move.player.popupMsg(self)
         move.player.claimedNoChoice = True
         move.player.showConcealedTiles(move.tile)
         # otherwise we have a visible artifact of the discarded tile.
         # Only when animations are disabled. Why?
-        if InternalParameters.field:
-            InternalParameters.field.centralView.resizeEvent(None)
+        if Internal.field:
+            Internal.field.centralView.resizeEvent(None)
         return client.ask(move, [Message.OK]).addCallback(self.hideConcealedAgain)
 
-    def hideConcealedAgain(self, dummyResult):
+    def hideConcealedAgain(self, result):
         """only show them for explaining the 'no choice'"""
         self.move.player.showConcealedTiles(self.move.tile, False)
+        return result
 
 class MessageUsedDangerousFrom(ServerMessage):
     """the game server tells us somebody claimed a dangerous tile"""
@@ -558,17 +604,28 @@ class MessageNoClaim(NotifyAtOnceMessage, ServerMessage):
         """returns text and warning flag for button and text for tile for button and text for tile"""
         return m18n('You cannot or do not want to claim this tile'), False, ''
 
+    @staticmethod
+    def receivers(deferredBlock):
+        """no Claim notifications are not needed for those who already said no Claim"""
+        others = NotifyAtOnceMessage.receivers(deferredBlock)
+        return list(x.player for x in deferredBlock.requests
+            if x.answer != Message.NoClaim and x.player in others)
+
 def __scanSelf():
     """for every message defined in this module which can actually be used for traffic,
     generate a class variable Message.msg where msg is the name (without spaces)
     of the message. Example: 'Message.NoClaim'.
-    Those will be used as stateless constants. Also add them to dict Message.defined."""
+    Those will be used as stateless constants. Also add them to dict Message.defined, but with spaces."""
     if not Message.defined:
         for glob in globals().values():
             if hasattr(glob, "__mro__"):
                 if glob.__mro__[-2] == Message and len(glob.__mro__) > 2:
                     if glob.__name__.startswith('Message'):
-                        msg = glob()
+                        try:
+                            msg = glob()
+                        except Exception:
+                            print('cannot instantiate %s' % glob.__name__)
+                            raise
                         type.__setattr__(Message, msg.name.replace(' ', ''), msg)
 
 class MessageTurnInterrupted(ServerMessage):
@@ -588,16 +645,12 @@ class MessageTurnInterrupted(ServerMessage):
         """
         return client.game.nixChances()
 
-class ChatMessage:
+class ChatMessage(object):
     """holds relevant info about a chat message"""
     def __init__(self, tableid, fromUser=None, message=None, isStatusMessage=False):
-        if isinstance(tableid, basestring) and SERVERMARK in tableid:
-            parts = tableid.split(SERVERMARK)
-            self.tableid = int(parts[0])
-            self.timestamp = datetime.time(hour=int(parts[1]), minute=int(parts[2]), second=int(parts[3]))
-            self.fromUser = parts[4]
-            self.message = parts[5]
-            self.isStatusMessage = bool(int(parts[6]))
+        if isinstance(tableid, tuple):
+            self.tableid, hour, minute, second, self.fromUser, self.message, self.isStatusMessage = tableid
+            self.timestamp = datetime.time(hour=hour, minute=minute, second=second)
         else:
             self.tableid = tableid
             self.fromUser = fromUser
@@ -625,15 +678,9 @@ class ChatMessage:
     def __repr__(self):
         return unicode(self)
 
-    def serialize(self):
-        """encode me in a string for network transfer"""
-        return SERVERMARK.join([
-            str(self.tableid),
-            str(self.timestamp.hour),
-            str(self.timestamp.minute),
-            str(self.timestamp.second),
-            self.fromUser,
-            self.message,
-            str(int(self.isStatusMessage))])
+    def asList(self):
+        """encode me for network transfer"""
+        return (self.tableid, self.timestamp.hour, self.timestamp.minute, self.timestamp.second,
+            self.fromUser, self.message, self.isStatusMessage)
 
 __scanSelf()

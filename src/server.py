@@ -26,20 +26,21 @@ O'Reilly Media, Inc., ISBN 0-596-10032-9
 import sys, os, random, traceback
 import signal
 import resource
+import datetime
 
 # keyboardinterrupt should simply terminate
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-from common import InternalParameters
-InternalParameters.isServer = True
-InternalParameters.logPrefix = 'S'
+from common import Options, Internal
+Internal.isServer = True
+Internal.logPrefix = 'S'
 from util import initLog
 initLog('kajonggserver')
 
 from PyQt4.QtCore import QCoreApplication
 from twisted.spread import pb
 from twisted.internet import error
-from twisted.internet.defer import maybeDeferred, fail
+from twisted.internet.defer import maybeDeferred, fail, succeed
 from zope.interface import implements
 from twisted.cred import checkers, portal, credentials, error as credError
 from twisted.internet import reactor
@@ -49,7 +50,6 @@ from player import Players
 from wall import WallEmpty
 from client import Client, Table
 from query import Transaction, Query, DBHandle, initDb
-from predefined import loadPredefinedRulesets
 from meld import Meld, PAIR, PUNG, KONG, CHOW
 from util import m18n, m18nE, m18ncE, logDebug, logWarning, SERVERMARK, \
     Duration, socketName, logError
@@ -57,6 +57,7 @@ from message import Message, ChatMessage
 from common import elements, Debug
 from sound import Voice
 from deferredutil import DeferredBlock
+from rule import Ruleset
 
 def srvMessage(*args):
     """concatenate all args needed for m18n encoded in one string.
@@ -116,12 +117,28 @@ class DBPasswordChecker(object):
 
 class ServerTable(Table):
     """a table on the game server"""
+    # pylint: disable=R0913
+    # pylint says too many arguments (9/8)
+    def __del__(self):
+        self.remotes = {}
+        self.game = None
+        self.owner = None
+        self.server = None
 
-    def __init__(self, server, owner, ruleset, suspendedAt, playOpen, autoPlay, wantedGame):
-        Table.__init__(self, server.generateTableId(), ruleset, suspendedAt, False, playOpen, autoPlay, wantedGame)
+    def delete(self):
+        """for better garbage collection"""
+        self.game = None
+        for remote in self.remotes.values():
+            remote.delete()
+
+    def __init__(self, server, owner, ruleset, suspendedAt, playOpen, autoPlay, wantedGame, tableId=None):
+        if tableId is None:
+            tableId = server.generateTableId()
+        Table.__init__(self, tableId, ruleset, suspendedAt, False, playOpen, autoPlay, wantedGame)
         self.server = server
         self.owner = owner
         self.users = [owner] if owner else []
+        self.remotes = {}   # maps client connections to users
         self.game = None
         server.tables[self.tableid] = self
 
@@ -129,11 +146,11 @@ class ServerTable(Table):
         """returns True if one of the players in the game is named 'name'"""
         return bool(self.game) and any(x.name == name for x in self.game.players)
 
-    def msg(self, withFullRuleset=False):
+    def asSimpleList(self, withFullRuleset=False):
         """return the table attributes to be sent to the client"""
         game = self.game
         onlineNames = [x.name for x in self.users]
-        if game:
+        if self.suspendedAt:
             names = tuple(x.name for x in game.players)
         else:
             names = tuple(x.name for x in self.users)
@@ -161,8 +178,14 @@ class ServerTable(Table):
         """sends a chat messages to all clients"""
         if Debug.chat:
             logDebug('server sends chat msg %s' % chatLine)
-        for other in self.users:
-            self.server.callRemote(other, 'chat', chatLine.serialize())
+        if self.suspendedAt:
+            chatters = []
+            for player in self.game.players:
+                chatters.extend(x for x in self.server.srvUsers if x.name == player.name)
+        else:
+            chatters = self.users
+        for other in chatters:
+            self.server.callRemote(other, 'chat', chatLine.asList())
 
     def addUser(self, user):
         """add user to this table"""
@@ -171,6 +194,8 @@ class ServerTable(Table):
         if len(self.users) == self.maxSeats():
             raise srvError(pb.Error, m18nE('All seats are already taken'))
         self.users.append(user)
+        if Debug.table:
+            logDebug('%s seated on table %s' % (user.name, self))
         self.sendChatMessage(ChatMessage(self.tableid, user.name,
             m18nE('takes a seat'), isStatusMessage=True))
 
@@ -185,10 +210,31 @@ class ServerTable(Table):
                 # silently pass ownership
                 if self.users:
                     self.owner = self.users[0]
+                    if Debug.table:
+                        logDebug('%s leaves table %d, %s is the new owner' % (
+                            user.name, self.tableid, self.owner))
+                else:
+                    if Debug.table:
+                        logDebug('%s leaves table %d, table is now empty' % (
+                            user.name, self.tableid))
+            else:
+                if Debug.table:
+                    logDebug('%s leaves table %d, %s stays owner' % (
+                        user.name, self.tableid, self.owner))
+
+    def __str__(self):
+        """for debugging output"""
+        onlineNames = list(x.name + ('(Owner)' if x == self.owner.name else '') for x in self.users)
+        offlineString = ''
+        if self.game:
+            offlineNames = list(x.name for x in self.game.players if x.name not in onlineNames
+                and not x.name.startswith('Robot'))
+            if offlineNames:
+                offlineString = ' offline:' + ','.join(offlineNames)
+        return '%d(%s%s)' % (self.tableid, ','.join(onlineNames), offlineString)
 
     def __repr__(self):
-        """for debugging output"""
-        return str(self.tableid) + ':' + ','.join(x.name for x in self.users)
+        return 'ServerTable(%s)' % str(self)
 
     def calcGameId(self):
         """based upon the max gameids we got from the clients, propose
@@ -199,7 +245,7 @@ class ServerTable(Table):
         gameIds.append(serverMaxGameId)
         return max(gameIds) + 1
 
-    def prepareNewGame(self):
+    def __prepareNewGame(self):
         """returns a new game object"""
         names = list(x.name for x in self.users)
         # the server and all databases save the english name but we
@@ -214,21 +260,22 @@ class ServerTable(Table):
             playOpen=self.playOpen, autoPlay=self.autoPlay, wantedGame=self.wantedGame, shouldSave=True)
         return result
 
+    def userForPlayer(self, player):
+        """finds the table user corresponding to player"""
+        for result in self.users:
+            if result.name == player.name:
+                return result
+
     def __connectPlayers(self):
         """connects client instances with the game players"""
         game = self.game
-        if not game.client:
-            # the server game representation gets a dummy client
-            game.client = Client()
         for player in game.players:
-            for user in self.users:
-                if player.name == user.name:
-                    player.remote = user
-        for player in game.players:
-            if not player.remote:
+            remote = self.userForPlayer(player)
+            if not remote:
                 # we found a robot player, its client runs in this server process
-                player.remote = Client(player.name)
-                player.remote.table = self
+                remote = Client(player.name)
+                remote.table = self
+            self.remotes[player] = remote
 
     def __checkDbIdents(self):
         """for 4 players, we have up to 4 data bases:
@@ -237,13 +284,13 @@ class ServerTable(Table):
         If a data base is used by more than one client, only one of
         them should update. Here we set shouldSave for all players,
         while the server always saves"""
-        serverIdent = InternalParameters.dbIdent
+        serverIdent = Internal.dbIdent
         dbIdents = set()
         game = self.game
         for player in game.players:
             player.shouldSave = False
-            if isinstance(player.remote, User):
-                dbIdent = player.remote.dbIdent
+            if isinstance(self.remotes[player], User):
+                dbIdent = self.remotes[player].dbIdent
                 assert dbIdent != serverIdent, \
                    'client and server try to use the same database:%s' % \
                    DBHandle.databaseName()
@@ -261,11 +308,12 @@ class ServerTable(Table):
             self.__checkDbIdents()
             self.initGame()
         else:
-            self.game = self.prepareNewGame()
+            self.game = self.__prepareNewGame()
             self.__connectPlayers()
             self.__checkDbIdents()
             self.proposeGameId(self.calcGameId())
         # TODO: remove table for all other srvUsers out of sight
+
     def proposeGameId(self, gameid):
         """server proposes an id to the clients ands waits for answers"""
         while True:
@@ -277,19 +325,23 @@ class ServerTable(Table):
                 gameid += random.randrange(1, 100)
         block = DeferredBlock(self)
         for player in self.game.players:
-            if player.shouldSave and isinstance(player.remote, User):
+            if player.shouldSave and isinstance(self.remotes[player], User):
                 # do not ask robot players, they use the server data base
                 block.tellPlayer(player, Message.ProposeGameId, gameid=gameid)
         block.callback(self.collectGameIdAnswers, gameid)
 
     def collectGameIdAnswers(self, requests, gameid):
         """clients answered if the proposed game id is free"""
-        for msg in requests:
-            if msg.answer == Message.NO:
-                self.proposeGameId(gameid + 1)
-                return
-        self.game.gameid = gameid
-        self.initGame()
+        if requests:
+            # when errrors happen, there might be no requests left
+            for msg in requests:
+                if msg.answer == Message.NO:
+                    self.proposeGameId(gameid + 1)
+                    return
+                elif msg.answer != Message.OK:
+                    raise srvError(pb.Error, 'collectGameIdAnswers got neither NO nor OK')
+            self.game.gameid = gameid
+            self.initGame()
 
     def initGame(self):
         """ask clients if they are ready to start"""
@@ -304,52 +356,58 @@ class ServerTable(Table):
 
     def startGame(self, requests):
         """if all players said ready, start the game"""
-        mayStart = True
-        for msg in requests:
-            if msg.answer == Message.NO or len(requests) < 4:
-                # this player answered "I am not ready", exclude her from table
-                # a player might already have logged of from the table. So if we
-                # are not 4 anymore, all players must leave the table
-                self.server.leaveTable(msg.player.remote, self.tableid)
-# TODO: the other players are still asked for game start - table should be reset instead
-                mayStart = False
-        if not mayStart:
-            self.game = None
-            return
+        for user in self.users:
+            userRequests = list(x for x in requests if x.user == user)
+            if not userRequests or userRequests[0].answer == Message.NoGameStart:
+                if Debug.table:
+                    if not userRequests:
+                        logDebug('Server.startGame: found no request for user %s' % user.name)
+                    else:
+                        logDebug('Server.startGame: %s said NoGameStart' % user.name)
+                self.game = None
+                return
+        if Debug.table:
+            logDebug('Game starts on table %s' % self)
         elementIter = iter(elements.all(self.game.ruleset))
         for tile in self.game.wall.tiles:
             tile.element = elementIter.next()
             tile.element = tile.upper()
         assert isinstance(self.game, RemoteGame), self.game
         self.running = True
-        # if the players on this table also reserved seats on other tables,
-        # clear them
+        self.__adaptOtherTables()
+        self.sendVoiceIds()
+
+    def __adaptOtherTables(self):
+        """if the players on this table also reserved seats on other tables, clear them
+        make running table invisible for other users"""
         for user in self.users:
             for tableid in self.server.tablesWith(user):
                 if tableid != self.tableid:
                     self.server.leaveTable(user, tableid)
-        # make running table invisible for other users
-        for srvUser in self.server.srvUsers:
-            if srvUser not in self.users:
+        foreigners = list(x for x in self.server.srvUsers if x not in self.users)
+        if foreigners:
+            if Debug.table:
+                logDebug('make running table %s invisible for %s' % (self, ','.join(str(x) for x in foreigners)))
+            for srvUser in foreigners:
                 self.server.callRemote(srvUser, 'tableRemoved', self.tableid, '')
-        self.sendVoiceIds()
 
     def sendVoiceIds(self):
         """tell each player what voice ids the others have. By now the client has a Game instance!"""
-        humanPlayers = [x for x in self.game.players if isinstance(x.remote, User)]
-        if len(humanPlayers) < 2 or not any(x.remote.voiceId for x in humanPlayers):
+        humanPlayers = [x for x in self.game.players if isinstance(self.remotes[x], User)]
+        if len(humanPlayers) < 2 or not any(self.remotes[x].voiceId for x in humanPlayers):
             # no need to pass around voice data
             self.assignVoices()
             return
         block = DeferredBlock(self)
         for player in humanPlayers:
-            if player.remote.voiceId:
+            remote = self.remotes[player]
+            if remote.voiceId:
                 # send it to other human players:
                 others = [x for x in humanPlayers if x != player]
                 if Debug.sound:
                     logDebug('telling other human players that %s has voiceId %s' % (
-                        player.name, player.remote.voiceId))
-                block.tell(player, others, Message.VoiceId, source=player.remote.voiceId)
+                        player.name, remote.voiceId))
+                block.tell(player, others, Message.VoiceId, source=remote.voiceId)
         block.callback(self.collectVoiceData)
 
     def collectVoiceData(self, requests):
@@ -362,12 +420,12 @@ class ServerTable(Table):
             if request.answer == Message.ClientWantsVoiceData:
                 # another human player requests sounds for voiceId
                 voiceId = request.args[0]
-                voiceFor = [x for x in self.game.players if isinstance(x.remote, User) \
-                    and x.remote.voiceId == voiceId][0]
+                voiceFor = [x for x in self.game.players if isinstance(self.remotes[x], User) \
+                    and self.remotes[x].voiceId == voiceId][0]
                 voiceFor.voice = Voice(voiceId)
                 if Debug.sound:
-                    logDebug('client %s wants voice data %s for %s' % (request.player.name, request.args[0], voiceFor))
-                voiceDataRequests.append((request.player, voiceFor))
+                    logDebug('client %s wants voice data %s for %s' % (request.user.name, request.args[0], voiceFor))
+                voiceDataRequests.append((request.user, voiceFor))
                 if not voiceFor.voice.oggFiles():
                     # the server does not have it, ask the client with that voice
                     block.tell(voiceFor, voiceFor, Message.ServerWantsVoiceData)
@@ -392,7 +450,7 @@ class ServerTable(Table):
 
     def assignVoices(self, dummyResults=None):
         """now all human players have all voice data needed"""
-        humanPlayers = [x for x in self.game.players if isinstance(x.remote, User)]
+        humanPlayers = [x for x in self.game.players if isinstance(self.remotes[x], User)]
         block = DeferredBlock(self)
         block.tell(None, humanPlayers, Message.AssignVoices)
         block.callback(self.startHand)
@@ -454,7 +512,7 @@ class ServerTable(Table):
             if Debug.originalCall:
                 logDebug('%s just violated OC with %s' % (player, player.discarded[-1]))
             player.mayWin = False
-            block.tellAll(player, Message.ViolatedOriginalCall)
+            block.tellAll(player, Message.ViolatesOriginalCall)
         if game.ruleset.mustDeclareCallingHand and not player.isCalling:
             if player.hand.callingHands(mustBeAvailable=True):
                 player.isCalling = True
@@ -465,14 +523,15 @@ class ServerTable(Table):
                     logDebug('%s claims no choice. Discarded %s, keeping %s. %s' % \
                          (player, tile, ''.join(player.concealedTileNames), ' / '.join(txt)))
                 player.claimedNoChoice = True
-                block.tellAll(player, Message.HasNoChoice, tile=player.concealedTileNames)
+                block.tellAll(player, Message.NoChoice, tile=player.concealedTileNames)
             else:
                 player.playedDangerous = True
                 if Debug.dangerousGame:
                     logDebug('%s played dangerous. Discarded %s, keeping %s. %s' % \
                          (player, tile, ''.join(player.concealedTileNames), ' / '.join(txt)))
-                block.tellAll(player, Message.PlayedDangerous, tile=player.concealedTileNames)
+                block.tellAll(player, Message.DangerousGame, tile=player.concealedTileNames)
         if msg.answer == Message.OriginalCall:
+            player.isCalling = True
             block.callback(self.clientMadeOriginalCall, msg)
         else:
             block.callback(self.askForClaims)
@@ -558,7 +617,7 @@ class ServerTable(Table):
                                    # clients started the new hand
         rotateWinds = self.game.maybeRotateWinds()
         if self.game.finished():
-            self.server.removeTable(self, 'gameOver', m18nE('The game is over!'))
+            self.server.removeTable(self, 'gameOver', m18nE('Game <numid>%1</numid> is over!'), self.game.seed)
             if Debug.process:
                 logDebug('MEM:%s' % resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
             return
@@ -648,7 +707,7 @@ class ServerTable(Table):
             assert player.isCalling, '%s %s: concmelds:%s withdiscard:%s lastmeld:%s' % (
                 self.game.handId(), player, concealedMelds, withDiscard, lastMeld)
         discardingPlayer = self.game.activePlayer
-        lastMove = self.game.lastMoves(without=[Message.PopupMsg]).next()
+        lastMove = self.game.lastMoves(withoutNotifications=True).next()
         robbedTheKong = lastMove.message == Message.DeclaredKong
         if robbedTheKong:
             player.lastSource = 'k'
@@ -714,7 +773,7 @@ class ServerTable(Table):
     def askForClaims(self, dummyRequests):
         """ask all players if they want to claim"""
         if self.running:
-            self.tellAll(self.game.activePlayer, Message.AskForClaims, self.moved)
+            self.tellOthers(self.game.activePlayer, Message.AskForClaims, self.moved)
 
     def processAnswers(self, requests):
         """a player did something"""
@@ -752,12 +811,20 @@ class ServerTable(Table):
     def dummyCallback(self, dummyRequests):
         pass
 
+    def tellOthers(self, player, command, callback=None, **kwargs):
+        """tell something about player to all other players"""
+        block = DeferredBlock(self)
+        block.tellOthers(player, command, **kwargs)
+        block.callback(callback)
+        return block
+
 class MJServer(object):
     """the real mah jongg server"""
     def __init__(self):
         self.tables = {}
         self.srvUsers = list()
         Players.load()
+        self.checkPings()
 
     def chat(self, chatString):
         """a client sent us a chat message"""
@@ -788,6 +855,16 @@ class MJServer(object):
                 user.mind = None
                 self.logout(user)
 
+    def checkPings(self):
+        """are all clients still alive? If not log them out"""
+        for user in self.srvUsers:
+            diff = datetime.datetime.now() - user.lastPing
+            if diff > datetime.timedelta(seconds=20):
+                logDebug('No messages from %s since 20 seconds, clearing connection now' % user.name)
+                user.mind = None
+                self.logout(user)
+        reactor.callLater(10, self.checkPings) # pylint:disable=E1101
+
     @staticmethod
     def ignoreLostConnection(failure):
         """if the client went away, do not dump error messages on stdout"""
@@ -796,26 +873,16 @@ class MJServer(object):
     def sendTables(self, user, tables=None):
         """send tables to user. If tables is None, he gets all new tables and those
         suspended tables he was sitting on"""
-        def needRulesets(neededRulesets):
-            """what rulesets do the tables to be sent use?"""
-            if Debug.traffic:
-                if neededRulesets:
-                    logDebug('user %s says he does not know rulesets %s' % (user.name, neededRulesets))
-                logDebug('SERVER sends %d tables to %s' % ( len(tables), user.name), withGamePrefix=False)
-            sentRulesets = []
-            result = []
-            for table in tables:
-                hashValue = table.ruleset.hash
-                needFullRuleset = hashValue in neededRulesets and not hashValue in sentRulesets
-                if needFullRuleset:
-                    sentRulesets.append(hashValue)
-                result.append(table.msg(needFullRuleset))
-            return result
         if tables is None:
             tables = list(x for x in self.tables.values() \
                 if not x.running and (not x.suspendedAt or x.hasName(user.name)))
-        rulesets = list(set(x.ruleset.hash for x in tables))
-        return self.callRemote(user, 'serverRulesets', rulesets).addCallback(needRulesets)
+        if len(tables):
+            if Debug.table:
+                logDebug('sending %d tables to %s: %s' % ( len(tables), user.name, tables))
+            data = list(x.asSimpleList() for x in tables)
+            return self.callRemote(user, 'newTables', data)
+        else:
+            return succeed([])
 
     def _lookupTable(self, tableid):
         """return table by id or raise exception"""
@@ -829,32 +896,60 @@ class MJServer(object):
         availableIds = set(x for x in range(1, 2+max(usedIds)))
         return min(availableIds - usedIds)
 
-    def newTable(self, user, ruleset, playOpen, autoPlay, wantedGame):
+    def newTable(self, user, ruleset, playOpen, autoPlay, wantedGame, tableId=None):
         """user creates new table and joins it"""
+        def gotRuleset(ruleset):
+            """now we have the full ruleset definition from the client"""
+            Ruleset.cached(ruleset).save(copy=True) # make it known to the cache and save in db
+        if tableId in self.tables:
+            return fail(srvError(pb.Error,
+                'You want a new table with id=%d but that id is already used for table %s' % (
+                    tableId, self.tables[tableId])))
+        if Ruleset.hashIsKnown(ruleset):
+            return self.__newTable(None, user, ruleset, playOpen, autoPlay, wantedGame, tableId)
+        else:
+            return self.callRemote(user, 'needRuleset', ruleset).addCallback(
+                gotRuleset).addCallback(
+                self.__newTable, user, ruleset, playOpen, autoPlay, wantedGame, tableId)
+
+    def __newTable(self, dummy, user, ruleset, playOpen, autoPlay, wantedGame, tableId=None):
+        """now we know the ruleset"""
         def sent(dummy):
             """new table sent to user who created it"""
             return table.tableid
-        def sent2(tables, user):
-            """now we know the client knows about our rulesets, so send the tables"""
-            self.callRemote(user, 'newTables', tables)
-        table = ServerTable(self, user, ruleset, None, playOpen, autoPlay, wantedGame)
+        table = ServerTable(self, user, ruleset, None, playOpen, autoPlay, wantedGame, tableId)
         result = None
         for srvUser in self.srvUsers:
-            deferred = self.sendTables(srvUser, [table]).addCallback(sent2, srvUser)
+            deferred = self.sendTables(srvUser, [table])
             if user == srvUser:
                 result = deferred
                 deferred.addCallback(sent)
         assert result
         return result
 
+    def needRulesets(self, rulesetHashes):
+        """the client wants those full rulesets"""
+        result = []
+        for table in self.tables.values():
+            if table.ruleset.hash in rulesetHashes:
+                result.append(table.ruleset.toList())
+        return result
+
     def joinTable(self, user, tableid):
         """user joins table"""
         table = self._lookupTable(tableid)
         table.addUser(user)
-        for srvUser in self.srvUsers:
-            self.callRemote(srvUser, 'tableChanged', table.msg())
+        block = DeferredBlock(table)
+        block.tell(None, self.srvUsers, Message.TableChanged, source=table.asSimpleList())
         if len(table.users) == table.maxSeats():
-            table.readyForGameStart(table.owner)
+            if Debug.table:
+                logDebug('Table %s: All seats taken, starting' % table)
+            def startTable(dummy):
+                """now all players know about our join"""
+                table.readyForGameStart(table.owner)
+            block.callback(startTable)
+        else:
+            block.callback(False)
         return True
 
     def tablesWith(self, user):
@@ -867,65 +962,87 @@ class MJServer(object):
             table = self.tables[tableid]
             if user in table.users:
                 if len(table.users) == 1 and not table.suspendedAt:
-                    self.removeTable(table, 'tableRemoved', message, *args)
+                    # silent: do not tell the user who left the table that he did
+                    self.removeTable(table, 'silent', message, *args)
                 else:
                     table.delUser(user)
-                    for srvUser in self.srvUsers:
-                        self.callRemote(srvUser, 'tableChanged', table.msg())
+                    block = DeferredBlock(table)
+                    block.tell(None, self.srvUsers, Message.TableChanged, source=table.asSimpleList())
+                    block.callback(False)
         return True
 
     def startGame(self, user, tableid):
         """try to start the game"""
         return self._lookupTable(tableid).readyForGameStart(user)
 
-    def removeTable(self, table, reason, message=None, *args):
-        """remove a table"""
-        assert reason in ('tableRemoved', 'gameOver', 'abort')
-        # HumanClient implements methods remote_tableRemoved etc.
-        message = message or ''
-        if Debug.connections:
-            logDebug('%s%s ' % (('%s:' % table.game.seed) if table.game else '',
-                m18n(message, *args)), withGamePrefix=None)
+    def __cleanData(self, table):
+        """for better garbage collection"""
+        table.delete()
         if table.tableid in self.tables:
-            tellUsers = table.users if table.running else self.srvUsers
-            for user in tellUsers:
-                self.callRemote(user, reason, table.tableid, message, *args)
-            for user in table.users:
-                table.delUser(user)
             del self.tables[table.tableid]
         for block in DeferredBlock.blocks[:]:
             if block.table == table:
                 DeferredBlock.blocks.remove(block)
+
+    def removeTable(self, table, reason, message=None, *args):
+        """remove a table"""
+        assert reason in ('silent', 'tableRemoved', 'gameOver', 'abort')
+        # HumanClient implements methods remote_tableRemoved etc.
+        message = message or ''
+        if Debug.connections or reason == 'abort':
+            logDebug('%s%s ' % (('%s:' % table.game.seed) if table.game else '',
+                m18n(message, *args)), withGamePrefix=None)
+        if table.tableid in self.tables:
+            if reason == 'silent':
+                tellUsers = []
+            else:
+                tellUsers = table.users if table.running else self.srvUsers
+            for user in tellUsers:
+                # this may in turn call removeTable again!
+                self.callRemote(user, reason, table.tableid, message, *args)
+            for user in table.users:
+                table.delUser(user)
+            if Debug.table:
+                logDebug('removing table %d: %s %s' % (table.tableid, m18n(message, *args), reason))
+        if table.game:
+            table.game.close()
+        self.__cleanData(table)
 
     def logout(self, user):
         """remove user from all tables"""
         if user not in self.srvUsers:
             return
         self.srvUsers.remove(user)
-        self.callRemote(user,'serverDisconnects')
-        for block in DeferredBlock.blocks:
-            for request in block.requests:
-                if request.player.remote == user:
-                    block.removeRequest(request)
         for tableid in self.tablesWith(user):
             self.leaveTable(user, tableid, m18nE('Player %1 has logged out'), user.name)
+        # wait a moment. We want the leaveTable message to arrive everywhere before
+        # we say serverDisconnects. Sometimes the order was reversed.
+        reactor.callLater(1, self.__logout2, user) # pylint: disable=E1101
+
+    def __logout2(self, user):
+        """now the leaveTable message had a good chance to get to the clients first"""
+        self.callRemote(user,'serverDisconnects')
         user.mind = None
+        for block in DeferredBlock.blocks:
+            for request in block.requests:
+                if request.user == user:
+                    block.removeRequest(request)
         # do not stop right now, the client might reconnect right away
         # this happens if the wanted human player name did not yet exist
         # in the data base - in that case login fails. Next the client
         # might tell us to add that user to the data base. So let's wait
         # to see for 5 seconds if he does
-        reactor.callLater(5, self.__stopNowAfterLastDisconnect)
+        reactor.callLater(5, self.__stopNowAfterLastDisconnect) # pylint: disable=E1101
 
     def __stopNowAfterLastDisconnect(self):
         """as the name says"""
         # pylint: disable=W0212
         # because we access _stopped
-        if InternalParameters.socket and not InternalParameters.continueServer \
-            and not self.srvUsers and reactor.running and not reactor._stopped:
+        if Options.socket and not Options.continueServer \
+            and not self.srvUsers and reactor.running and not reactor._stopped: # pylint: disable=E1101
             if Debug.connections:
                 logDebug('local server terminates. Reason: last client disconnected')
-            reactor.stop()
+            reactor.stop() # pylint: disable=E1101
 
     def loadSuspendedTables(self, user):
         """loads all yet unloaded suspended tables where this
@@ -959,6 +1076,9 @@ class MJServer(object):
 
 class User(pb.Avatar):
     """the twisted avatar"""
+    def delete(self):
+        """for better garbage collection"""
+        pass
     def __init__(self, userid):
         self.name = Query(['select name from player where id=%d' % userid]).records[0][0]
         self.mind = None
@@ -966,6 +1086,13 @@ class User(pb.Avatar):
         self.dbIdent = None
         self.voiceId = None
         self.maxGameId = None
+        self.lastPing = None
+        self.lastPing = datetime.datetime.now()
+        self.pinged()
+
+    def pinged(self):
+        """time of last ping or message from user"""
+        self.lastPing = datetime.datetime.now()
 
     def attached(self, mind):
         """override pb.Avatar.attached"""
@@ -973,6 +1100,8 @@ class User(pb.Avatar):
         self.server.login(self)
     def detached(self, dummyMind):
         """override pb.Avatar.detached"""
+        if Debug.connections:
+            logDebug('%s: connection detached' % self)
         self.server.logout(self)
         self.mind = None
     def perspective_setClientProperties(self, dbIdent, voiceId, maxGameId, clientVersion=None):
@@ -980,7 +1109,7 @@ class User(pb.Avatar):
         self.dbIdent = dbIdent
         self.voiceId = voiceId
         self.maxGameId = maxGameId
-        serverVersion = InternalParameters.version
+        serverVersion = Internal.version
         if clientVersion != serverVersion:
             # we assume that versions x.y.* are compatible
             if clientVersion is None:
@@ -998,22 +1127,22 @@ class User(pb.Avatar):
                         m18nE('Your client has version %1 but you need %2 for this server'),
                             clientVersion or '<4.9.0',
                             '.'.join(serverVersion.split('.')[:2]) + '.*'))
-    @staticmethod
-    def perspective_ping():
+        self.server.sendTables(self)
+    def perspective_ping(self):
         """perspective_* methods are to be called remotely"""
-        return None
-    def perspective_sendTables(self):
+        return self.pinged()
+    def perspective_needRulesets(self, rulesetHashes):
         """perspective_* methods are to be called remotely"""
-        return self.server.sendTables(self)
+        return self.server.needRulesets(rulesetHashes)
     def perspective_joinTable(self, tableid):
         """perspective_* methods are to be called remotely"""
         return self.server.joinTable(self, tableid)
     def perspective_leaveTable(self, tableid):
         """perspective_* methods are to be called remotely"""
         return self.server.leaveTable(self, tableid)
-    def perspective_newTable(self, ruleset, playOpen, autoPlay, wantedGame):
+    def perspective_newTable(self, ruleset, playOpen, autoPlay, wantedGame, tableId=None):
         """perspective_* methods are to be called remotely"""
-        return self.server.newTable(self, ruleset, playOpen, autoPlay, wantedGame)
+        return self.server.newTable(self, ruleset, playOpen, autoPlay, wantedGame, tableId)
     def perspective_startGame(self, tableid):
         """perspective_* methods are to be called remotely"""
         return self.server.startGame(self, tableid)
@@ -1024,7 +1153,9 @@ class User(pb.Avatar):
         """perspective_* methods are to be called remotely"""
         return self.server.chat(chatString)
     def __str__(self):
-        return '%d:%s' % (id(self) % 10000, self.name)
+        return self.name
+    def __repr__(self):
+        return 'User({!s})'.format(self)
 
 class MJRealm(object):
     """connects mind and server"""
@@ -1053,7 +1184,7 @@ def kajonggServer():
     # pylint: disable=R0912
     from optparse import OptionParser
     parser = OptionParser()
-    defaultPort = InternalParameters.defaultPort()
+    defaultPort = Options.defaultPort()
     parser.add_option('', '--port', dest='port',
         help=m18n('the server will listen on PORT (%d)' % defaultPort),
         type=int, default=defaultPort)
@@ -1070,39 +1201,42 @@ def kajonggServer():
     if args and ''.join(args):
         logWarning(m18n('unrecognized arguments:%1', ' '.join(args)))
         sys.exit(2)
-    InternalParameters.continueServer |= options.continueServer
+    Options.continueServer |= options.continueServer
     if options.dbpath:
-        InternalParameters.dbPath = os.path.expanduser(options.dbpath)
+        Options.dbPath = os.path.expanduser(options.dbpath)
     if options.local:
-        InternalParameters.socket = socketName()
+        Options.socket = socketName()
     if options.socket:
-        InternalParameters.socket = options.socket
+        Options.socket = options.socket
     Debug.setOptions(options.debug)
+    Options.fixed = True # may not be changed anymore
+    del parser           # makes Debug.gc quieter
+
     if not initDb():
         sys.exit(1)
     realm = MJRealm()
     realm.server = MJServer()
     kajonggPortal = portal.Portal(realm, [DBPasswordChecker()])
-    loadPredefinedRulesets()
+    import predefined # pylint: disable=W0612
     try:
-        if InternalParameters.socket:
+        if Options.socket:
             if os.name == 'nt':
                 if Debug.connections:
                     logDebug('local server listening on 127.0.0.1 port %d' % options.port)
-                reactor.listenTCP(options.port, pb.PBServerFactory(kajonggPortal),
+                reactor.listenTCP(options.port, pb.PBServerFactory(kajonggPortal), # pylint: disable=E1101
                     interface='127.0.0.1')
             else:
                 if Debug.connections:
-                    logDebug('local server listening on UNIX socket %s' % InternalParameters.socket)
-                reactor.listenUNIX(InternalParameters.socket, pb.PBServerFactory(kajonggPortal))
+                    logDebug('local server listening on UNIX socket %s' % Options.socket)
+                reactor.listenUNIX(Options.socket, pb.PBServerFactory(kajonggPortal)) # pylint: disable=E1101
         else:
             if Debug.connections:
                 logDebug('server listening on port %d' % options.port)
-            reactor.listenTCP(options.port, pb.PBServerFactory(kajonggPortal))
-    except error.CannotListenError, errObj:
+            reactor.listenTCP(options.port, pb.PBServerFactory(kajonggPortal)) # pylint: disable=E1101
+    except error.CannotListenError as errObj:
         logWarning(errObj)
     else:
-        reactor.run()
+        reactor.run() # pylint: disable=E1101
 
 def profileMe():
     """where do we lose time?"""

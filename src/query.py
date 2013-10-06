@@ -27,7 +27,7 @@ import os, sys, time, datetime, traceback, random
 from collections import defaultdict
 from PyQt4.QtCore import QVariant, QString
 from util import logInfo, logWarning, logException, logDebug, appdataDir, m18ncE, xToUtf8
-from common import InternalParameters, Debug, IntDict
+from common import Options, Internal, Debug, IntDict
 from PyQt4.QtSql import QSqlQuery, QSqlDatabase, QSql
 
 
@@ -110,7 +110,7 @@ class DBHandle(QSqlDatabase):
             self.createTable(table)
         self.createIndex('idxgame', 'score(game)')
 
-        if InternalParameters.isServer:
+        if Internal.isServer:
             Query('ALTER TABLE player add password text')
         else:
             self.createTable('passwords')
@@ -225,7 +225,7 @@ class DBHandle(QSqlDatabase):
                     "'False Naming%' OR manualrules LIKE 'False Decl%'")
         if self.tableHasField('player', 'host'):
             self.cleanPlayerTable()
-        if InternalParameters.isServer:
+        if Internal.isServer:
             if not self.tableHasField('player', 'password'):
                 Query('ALTER TABLE player add password text')
         else:
@@ -253,12 +253,12 @@ class DBHandle(QSqlDatabase):
         records = Query('select ident from general').records
         assert len(records) < 2
         if records:
-            InternalParameters.dbIdent = records[0][0]
+            Internal.dbIdent = records[0][0]
             if Debug.sql:
-                logDebug('found dbIdent for %s: %s' % (self.name, InternalParameters.dbIdent))
+                logDebug('found dbIdent for %s: %s' % (self.name, Internal.dbIdent))
         else:
-            InternalParameters.dbIdent = str(random.randrange(100000000000))
-            Query("INSERT INTO general(ident) values('%s')" % InternalParameters.dbIdent)
+            Internal.dbIdent = str(random.randrange(100000000000))
+            Query("INSERT INTO general(ident) values('%s')" % Internal.dbIdent)
 
     def __init__(self):
         QSqlDatabase.__init__(self, "QSQLITE")
@@ -296,8 +296,8 @@ class DBHandle(QSqlDatabase):
     @staticmethod
     def dbPath():
         """the path for the data base"""
-        name = 'kajonggserver.db' if InternalParameters.isServer else 'kajongg.db'
-        return InternalParameters.dbPath.decode('utf-8') if InternalParameters.dbPath else appdataDir() + name
+        name = 'kajonggserver.db' if Internal.isServer else 'kajongg.db'
+        return Options.dbPath.decode('utf-8') if Options.dbPath else appdataDir() + name
 
     def __del__(self):
         """really free the handle"""
@@ -305,17 +305,14 @@ class DBHandle(QSqlDatabase):
         if Debug.sql:
             logDebug('closed DBHandle %s' % self.name)
 
-    @apply
-    def name():
+    @property
+    def name(self):
         """get name for log messages. Readonly."""
-        def fget(self):
-            # pylint: disable=W0212
-            stack = list(x[2] for x in traceback.extract_stack())
-            name = stack[-3]
-            if name in ('__exit__', '__init__'):
-                name = stack[-4]
-            return '%s on %s (%x)' % (name , self.databaseName(), id(self))
-        return property(**locals())
+        stack = list(x[2] for x in traceback.extract_stack())
+        name = stack[-3]
+        if name in ('__exit__', '__init__'):
+            name = stack[-4]
+        return '%s on %s (%x)' % (name , self.databaseName(), id(self))
 
     def transaction(self, silent=None):
         """commit and log it"""
@@ -492,7 +489,7 @@ def initDb():
     sets DBHandle.default."""
     try:
         DBHandle() # sets DBHandle.default
-    except BaseException, exc:
+    except BaseException as exc:
         DBHandle.default = None
         logException(exc)
         return False

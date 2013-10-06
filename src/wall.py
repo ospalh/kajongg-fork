@@ -18,6 +18,8 @@ along with this program if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
+import weakref
+
 from common import elements
 from tile import Tile
 
@@ -28,16 +30,19 @@ class WallEmpty(Exception):
 class Wall(object):
     """represents the wall with four sides. self.wall[] indexes them counter clockwise, 0..3. 0 is bottom.
     Wall.tiles always holds references to all tiles in the game even when they are used"""
+    tileClass = Tile
     def __init__(self, game):
         """init and position the wall"""
-        # we use only white dragons for building the wall. We could actually
-        # use any tile because the face is never shown anyway.
-        self.game = game
-        tileCount = elements.count(game.ruleset)
-        self.tiles = [Tile('Xy') for _ in range(tileCount)]
+        self._game = weakref.ref(game)  # avoid cycles for garbage collection
+        self.tiles = [self.tileClass('Xy') for _ in range(elements.count(game.ruleset))]
         self.living = None
         self.kongBox = None
         assert len(self.tiles) % 8 == 0
+
+    @property
+    def game(self):
+        """hide the fact that this is a weakref"""
+        return self._game()
 
     def deal(self, tileNames=None, deadEnd=False):
         """deal tiles. May raise WallEmpty.

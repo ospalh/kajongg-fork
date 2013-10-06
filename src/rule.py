@@ -47,6 +47,7 @@ class Score(object):
     should want to set more than one unit, split it into two rules.
     For the first use case only we have the attributes value and unit"""
 
+    __hash__ = None
 
     def __init__(
             self, points=0, doubles=0, limits=0, ruleset=None,
@@ -311,6 +312,8 @@ class Ruleset(object):
     # pylint: disable=R0902
     # pylint we need more than 10 instance attributes
 
+    __hash__ = None
+
     cache = dict()
     hits = 0
     misses = 0
@@ -325,6 +328,9 @@ class Ruleset(object):
     @staticmethod
     def cached(name):
         """If a Ruleset instance is never changed, we can use a cache"""
+        if isinstance(name, list):
+            # we got the rules over the wire
+            _, name, _, _ = name[0] # copy its hash into name
         for predefined in PredefinedRuleset.rulesets():
             if predefined.hash == name:
                 return predefined
@@ -376,28 +382,24 @@ into a situation where you have to pay a penalty"""))
         # in trouble when updating
         self._initRuleset()
 
-    @apply
-    def dirty(): # pylint: disable=E0202
+    @property
+    def dirty(self):
         """have we been modified since load or last save?"""
-        def fget(self):
-            # pylint: disable=W0212
-            return self.__dirty
-        def fset(self, dirty):
-            # pylint: disable=W0212
-            self.__dirty = dirty
-            if dirty:
-                self.__computeHash()
-        return property(**locals())
+        return self.__dirty
 
-    @apply
-    def hash():
+    @dirty.setter
+    def dirty(self, dirty):
+        """have we been modified since load or last save?"""
+        self.__dirty = dirty
+        if dirty:
+            self.__computeHash()
+
+    @property
+    def hash(self):
         """a md5sum computed from the rules but not name and description"""
-        def fget(self):
-            # pylint: disable=W0212
-            if not self.__hash:
-                self.__computeHash()
-            return self.__hash
-        return property(**locals())
+        if not self.__hash:
+            self.__computeHash()
+        return self.__hash
 
 
     def __eq__(self, other):
@@ -429,6 +431,7 @@ into a situation where you have to pay a penalty"""))
             # we got the rules over the wire
             self.rawRules = self.name[1:]
             (self.rulesetId, self.__hash, self.name, self.description) = self.name[0]
+            self.load() # load raw rules at once, rules from db only when needed
             return
         else:
             query = Query("select id,hash,name,description from ruleset where hash=?",
@@ -501,14 +504,6 @@ into a situation where you have to pay a penalty"""))
                     rule = Rule(name, definition, pointValue, int(doubles), float(limits))
                 ruleList.add(rule)
                 break
-
-    def findRule(self, name):
-        """return the rule named 'name'. Also finds it if the rule definition starts with name"""
-        for ruleList in self.ruleLists:
-            for rule in ruleList:
-                if rule.name == name or rule.definition.startswith(name):
-                    return rule
-        raise Exception('no rule found:' + name)
 
     def findUniqueOption(self, action):
         """return first rule with option"""
@@ -763,61 +758,57 @@ class Rule(object):
                 break
         self.definition = definition
 
-    @apply
-    def definition(): # pylint: disable=E0202
+    @property
+    def definition(self):
         """the rule definition. See user manual about ruleset."""
-        # pylint: disable=R0912
-        def fget(self):
-            # pylint: disable=W0212
-            if isinstance(self._definition, list):
-                return '||'.join(self._definition)
-            return self._definition
-        def fset(self, definition):
-            """setter for definition"""
-            # pylint: disable=W0212
-            assert not isinstance(definition, QString)
-            prevDefinition = self.definition
-            self._definition = definition
-            if not definition:
-                return # may happen with special programmed rules
-            variants = definition.split('||')
-            if self.parType:
-                self.parName = variants[0]
-                variants = variants[1:]
-            self.options = {}
-            self.function = None
-            self.hasSelectable = False
-            for idx, variant in enumerate(variants):
-                if isinstance(variant, (str, unicode)):
-                    variant = str(variant)
-                    if variant[0] == 'F':
-                        assert idx == 0
-                        self.function = rulecode.Function.functions[variant[1:]]()
-                        # when executing code for this rule, we do not want
-                        # to call those things indirectly
-                        if hasattr(self.function, 'appliesToHand'):
-                            self.appliesToHand = self.function.appliesToHand
-                        if hasattr(self.function, 'appliesToMeld'):
-                            self.appliesToMeld = self.function.appliesToMeld
-                        if hasattr(self.function, 'selectable'):
-                            self.hasSelectable = True
-                            self.selectable = self.function.selectable
-                        if hasattr(self.function, 'winningTileCandidates'):
-                            self.winningTileCandidates = self.function.winningTileCandidates
-                    elif variant[0] == 'O':
-                        for action in variant[1:].split():
-                            aParts = action.split('=')
-                            if len(aParts) == 1:
-                                aParts.append('None')
-                            self.options[aParts[0]] = aParts[1]
-                    elif variant == 'XEAST9X':
-                        pass
-                    else:
-                        pass
-            if self.function:
-                self.function.options = self.options
-            self.validateDefinition(prevDefinition)
-        return property(**locals())
+        if isinstance(self._definition, list):
+            return '||'.join(self._definition)
+        return self._definition
+
+    @definition.setter
+    def definition(self, definition):
+        """setter for definition"""
+        #pylint: disable=R0912
+        assert not isinstance(definition, QString)
+        prevDefinition = self.definition
+        self._definition = definition
+        if not definition:
+            return # may happen with special programmed rules
+        variants = definition.split('||')
+        if self.parType:
+            self.parName = variants[0]
+            variants = variants[1:]
+        self.options = {}
+        self.function = None
+        self.hasSelectable = False
+        for idx, variant in enumerate(variants):
+            if isinstance(variant, (str, unicode)):
+                variant = str(variant)
+                if variant[0] == 'F':
+                    assert idx == 0
+                    self.function = rulecode.Function.functions[variant[1:]]()
+                    # when executing code for this rule, we do not want
+                    # to call those things indirectly
+                    if hasattr(self.function, 'appliesToHand'):
+                        self.appliesToHand = self.function.appliesToHand
+                    if hasattr(self.function, 'appliesToMeld'):
+                        self.appliesToMeld = self.function.appliesToMeld
+                    if hasattr(self.function, 'selectable'):
+                        self.hasSelectable = True
+                        self.selectable = self.function.selectable
+                    if hasattr(self.function, 'winningTileCandidates'):
+                        self.winningTileCandidates = self.function.winningTileCandidates
+                elif variant[0] == 'O':
+                    for action in variant[1:].split():
+                        aParts = action.split('=')
+                        if len(aParts) == 1:
+                            aParts.append('None')
+                        self.options[aParts[0]] = aParts[1]
+                else:
+                    pass
+        if self.function:
+            self.function.options = self.options
+        self.validateDefinition(prevDefinition)
 
     def validateDefinition(self, prevDefinition):
         """check for validity. If wrong, restore prevDefinition."""
@@ -836,19 +827,19 @@ class Rule(object):
                 return m18nc('wrong value for rule', '%1: %2 is too small, minimal value is %3',
                     m18n(self.name), self.parameter, minValue)
 
-    def appliesToHand(self, dummyHand): # pylint: disable=R0201
+    def appliesToHand(self, dummyHand): # pylint: disable=R0201, E0202
         """does the rule apply to this hand?"""
         return False
 
-    def selectable(self, dummyHand): # pylint: disable=R0201
+    def selectable(self, dummyHand): # pylint: disable=R0201, E0202
         """does the rule apply to this hand?"""
         return False
 
-    def appliesToMeld(self, dummyHand, dummyMeld): # pylint: disable=R0201
+    def appliesToMeld(self, dummyHand, dummyMeld): # pylint: disable=R0201, E0202
         """does the rule apply to this meld?"""
         return False
 
-    def winningTileCandidates(self, dummyHand): # pylint: disable=R0201
+    def winningTileCandidates(self, dummyHand): # pylint: disable=R0201, E0202
         """those might be candidates for a calling hand"""
         return set()
 
@@ -916,6 +907,7 @@ class PredefinedRuleset(Ruleset):
     """special code for loading rules from program code instead of from the database"""
 
     classes = set()  # only those will be playable
+    preRulesets = None
 
     def __init__(self, name=None):
         Ruleset.__init__(self, name or 'general predefined ruleset')
@@ -923,7 +915,10 @@ class PredefinedRuleset(Ruleset):
     @staticmethod
     def rulesets():
         """a list of instances for all predefined rulesets"""
-        return list(x() for x in PredefinedRuleset.classes)
+        if PredefinedRuleset.preRulesets is None:
+            PredefinedRuleset.preRulesets = list(x()
+                for x in sorted(PredefinedRuleset.classes, key=lambda x:x.__name__))
+        return PredefinedRuleset.preRulesets
 
     def rules(self):
         """here the predefined rulesets can define their rules"""

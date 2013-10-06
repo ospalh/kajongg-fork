@@ -841,9 +841,8 @@ class KansaiJapaneseStyleRuleset(JapaneseJapaneseStyleRuleset):
         self.winnerRules['Seven pairs'].points = 50
 
 
-def loadPredefinedRulesets():
-    """add new predefined rulesets here"""
-    if not PredefinedRuleset.classes:
-        PredefinedRuleset.classes.add(ClassicalChineseDMJL)
-        PredefinedRuleset.classes.add(ClassicalChineseBMJA)
+# add new predefined rulesets here
+if not PredefinedRuleset.classes:
+    PredefinedRuleset.classes.add(ClassicalChineseDMJL)
+    PredefinedRuleset.classes.add(ClassicalChineseBMJA)
         PredefinedRuleset.classes.add(JapaneseStyleRuleset)

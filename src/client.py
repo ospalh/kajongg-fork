@@ -24,11 +24,12 @@ from PyQt4.QtCore import QTimer
 from twisted.spread import pb
 from twisted.internet import reactor
 from twisted.internet.task import deferLater
-from twisted.internet.defer import Deferred, succeed, DeferredList
+from twisted.internet.defer import Deferred, succeed
+from twisted.internet.error import ReactorNotRunning
 from twisted.python.failure import Failure
-from util import logDebug, logException, logWarning, Duration, m18nc
+from util import logDebug, logException, logWarning, Duration, m18nc, checkMemory
 from message import Message
-from common import InternalParameters, Debug
+from common import Internal, Debug
 from rule import Ruleset
 from meld import meldsContent
 from game import RemoteGame
@@ -37,6 +38,7 @@ from move import Move
 from animation import animate
 from intelligence import AIDefault
 from statesaver import StateSaver
+from player import Player
 
 class Table(object):
     """defines things common to both ClientTable and ServerTable"""
@@ -94,83 +96,76 @@ class ClientTable(Table):
         return False
 
     def __str__(self):
-        return 'Table %d %s gameid=%s rules %s players %s online %s' % (self.tableid or 0,
-            self.status(), self.gameid, self.ruleset.name,
-            ', '.join(self.playerNames), ', '.join(str(x) for x in self.playersOnline))
+        onlineNames = list(x for x in self.playerNames if self.isOnline(x))
+        offlineString = ''
+        offlineNames = list(x for x in self.playerNames if x not in onlineNames
+            and not x.startswith('Robot'))
+        if offlineNames:
+            offlineString = ' offline:' + ','.join(offlineNames)
+        return '%d(%s %s%s)' % (self.tableid, self.ruleset.name, ','.join(onlineNames), offlineString)
+
+    def __repr__(self):
+        return 'ClientTable(%s)' % str(self)
 
     def gameExistsLocally(self):
         """does the game exist in the data base of the client?"""
         assert self.gameid
         return bool(Query('select 1 from game where id=?', list([self.gameid])).records)
 
-    def humanPlayerNames(self):
-        """returns a list excluding robot players"""
-        return list(x for x in self.playerNames if not x.startswith('Robot '))
-
-class Client(pb.Referenceable):
+class Client(object, pb.Referenceable):
     """interface to the server. This class only implements the logic,
     so we can also use it on the server for robot clients. Compare
     with HumanClient(Client)"""
 
-    clients = []
+    def __del__(self):
+        self.game = None
 
-    def __init__(self, username=None, intelligence=AIDefault):
-        """username is something like Robot 1 or None for the game server"""
-        self.username = username
+    def __init__(self, name=None, intelligence=AIDefault):
+        """name is something like Robot 1 or None for the game server"""
+        self.name = name
         self.game = None
         self.intelligence = intelligence(self)
-        self.connectedWithServer = None # a robot client running within the server
+        self.__connection = None
         self.tables = []
         self.table = None
         self.tableList = None
         self.sayable = {} # recompute for each move, use as cache
-        self.clients.append(self)
 
-    def tableById(self, tableid):
+    def delete(self):
+        """for better garbage collection"""
+        self.table = None
+        self.intelligence = None
+
+    @property
+    def connection(self):
+        """update main window title if needed"""
+        return self.__connection
+
+    @connection.setter
+    def connection(self, value):
+        """update main window title if needed"""
+        if self.__connection != value:
+            self.__connection = value
+            if Internal.field:
+                Internal.field.updateGUI()
+
+    def _tableById(self, tableid):
         """returns table with tableid"""
         for table in self.tables:
             if table.tableid == tableid:
                 return table
-
-    def tableByGameId(self, gameid):
-        """returns table with gameid"""
-        for table in self.tables:
-            if table.gameid == gameid:
-                return table
-
-    @staticmethod
-    def shutdownClients(exception=None):
-        """close connections to servers except maybe one"""
-        clients = Client.clients
-        def done():
-            """return True if clients is cleaned"""
-            return len(clients) == 0 or (exception and clients == [exception])
-        def disconnectedClient(dummyResult, client):
-            """now the client is really disconnected from the server"""
-            if client in clients:
-                # HumanClient.serverDisconnects also removes it!
-                clients.remove(client)
-        if isinstance(exception, Failure):
-            logException(exception)
-        for client in clients[:]:
-            if client.tableList:
-                client.tableList.hide()
-        if done():
-            return succeed(None)
-        deferreds = []
-        for client in clients[:]:
-            if client != exception and client.connectedWithServer:
-                deferreds.append(client.logout().addCallback(disconnectedClient, client))
-        return DeferredList(deferreds)
 
     @staticmethod
     def quitProgram(result=None):
         """now all connections to servers are cleanly closed"""
         if isinstance(result, Failure):
             logException(result)
-        InternalParameters.reactor.stop()
+        try:
+            Internal.reactor.stop()
+        except ReactorNotRunning:
+            pass
         StateSaver.saveAll()
-        field = InternalParameters.field
+        field = Internal.field
         if field:
             # if we have the ruleset editor visible, we get:
             # File "/hdd/pub/src/gitgames/kajongg/src/rulesetselector.py", line 194, in headerData
@@ -179,33 +174,34 @@ class Client(pb.Referenceable):
             # how can Qt get None? Same happens with QEvent, see statesaver.py
             if field.confDialog:
                 field.confDialog.hide()
+            field.hide() # do not make the user see the delay for stopping the reactor
         # we may be in a Deferred callback which would
         # catch sys.exit as an exception
         # and the qt4reactor does not quit the app when being stopped
+        Internal.quitWaitTime = 0
         QTimer.singleShot(10, Client.appquit)
 
     @staticmethod
     def appquit():
         """retry until the reactor really stopped"""
-        if InternalParameters.reactor.running:
+        if Internal.reactor.running:
+            Internal.quitWaitTime += 10
+            if Internal.quitWaitTime % 1000 == 0:
+                logDebug('waiting since %d seconds for reactor to stop' % (Internal.quitWaitTime // 1000))
             QTimer.singleShot(10, Client.appquit)
         else:
-            InternalParameters.app.quit()
+            if Internal.quitWaitTime > 1000:
+                logDebug('reactor stopped after %d seconds' % (Internal.quitWaitTime // 1000))
+            Internal.app.quit()
+            checkMemory()
 
     def logout(self, dummyResult=None): # pylint: disable=R0201
         """virtual"""
         return succeed(None)
 
-    @apply
-    def host():
-        """the name of the host we are connected with"""
-        def fget(dummySelf):
-            return None # Client on the server
-        return property(**locals())
-
     def isRobotClient(self):
         """avoid using isinstance because that imports too much for the server"""
-        return bool(self.username)
+        return bool(self.name)
 
     @staticmethod
     def isHumanClient():
@@ -214,11 +210,14 @@ class Client(pb.Referenceable):
 
     def isServerClient(self):
         """avoid using isinstance because that imports too much for the server"""
-        return bool(not self.username)
+        return bool(not self.name)
 
     def remote_newTables(self, tables):
         """update table list"""
-        self.tables.extend(list(ClientTable(self, *x) for x in tables)) # pylint: disable=W0142
+        newTables = list(ClientTable(self, *x) for x in tables) # pylint: disable=W0142
+        self.tables.extend(newTables)
+        if Debug.table:
+            logDebug('%s got new tables:%s' % (self.name, newTables))
 
     @staticmethod
     def remote_serverRulesets(hashes):
@@ -230,17 +229,18 @@ class Client(pb.Referenceable):
         more changes to the client code"""
         return list(x for x in hashes if not Ruleset.hashIsKnown(x))
 
-    def remote_tableChanged(self, table):
+    def tableChanged(self, table):
         """update table list"""
-        newClientTable = ClientTable(self, *table) # pylint: disable=W0142
-        oldTable = self.tableById(newClientTable.tableid)
+        newTable = ClientTable(self, *table) # pylint: disable=W0142
+        oldTable = self._tableById(newTable.tableid)
         if oldTable:
             self.tables.remove(oldTable)
-            self.tables.append(newClientTable)
+            self.tables.append(newTable)
+        return oldTable, newTable
 
     def remote_tableRemoved(self, tableid, dummyMsg, *dummyMsgArgs):
         """update table list"""
-        table = self.tableById(tableid)
+        table = self._tableById(tableid)
         if table:
             self.tables.remove(table)
 
@@ -249,11 +249,12 @@ class Client(pb.Referenceable):
         in our local data base - we want to use the same gameid everywhere"""
         with Transaction():
             query = Query('insert into game(id,seed) values(?,?)',
-                      list([gameid, self.host]), mayFail=True)
+                      list([gameid, self.connection.url]), mayFail=True)
             if query.rowcount() != 1:
                 return Message.NO
+        return Message.OK
 
-    def readyForGameStart(self, tableid, gameid, wantedGame, playerNames, shouldSave=True):
+    def readyForGameStart(self, dummyTableid, gameid, wantedGame, playerNames, shouldSave=True):
         """the game server asks us if we are ready. A robot is always ready."""
         def disagree(about):
             """do not bother to translate this, it should normally not happen"""
@@ -261,12 +262,6 @@ class Client(pb.Referenceable):
             msg = 'The data bases for game %s have different %s' % (self.game.seed, about)
             logWarning(msg)
             raise pb.Error(msg)
-        if self.isHumanClient():
-            assert not self.table
-            assert self.tables
-            self.table = self.tableById(tableid)
-            if not self.table:
-                raise pb.Error('client.readyForGameStart: tableid %d unknown' % tableid)
         if self.table.suspendedAt:
             self.game = RemoteGame.loadFromDB(gameid, self)
             self.game.assignPlayers(playerNames)
@@ -292,36 +287,40 @@ class Client(pb.Referenceable):
             self.game.rotateWinds()
         self.game.prepareHand()
 
+    def __delayAnswer(self, result, delay, delayStep):
+        """try again, may we chow now?"""
+        noClaimCount = 0
+        delay += delayStep
+        for move in self.game.lastMoves():
+            # latest move first
+            if move.message == Message.Discard:
+                break
+            elif move.message == Message.NoClaim and move.notifying:
+                noClaimCount += 1
+                if noClaimCount == 2:
+                    # self.game.debug('everybody said "I am not interested", so %s claims chow now' %
+                    #     self.game.myself.name)
+                    return result
+            elif move.message in (Message.Pung, Message.Kong) and move.notifying:
+                # self.game.debug('somebody said Pung or Kong, so %s suppresses Chow' % self.game.myself.name)
+                return Message.NoClaim
+        if delay < self.game.ruleset.claimTimeout * 0.95:
+            # one of those slow humans is still thinking
+            return deferLater(reactor, delayStep, self.__delayAnswer, result, delay, delayStep)
+        # self.game.debug('%s must chow now because timeout is over' % self.game.myself.name)
+        return result
+
     def ask(self, move, answers):
         """this is where the robot AI should go.
         sends answer and one parameter to server"""
         delay = 0.0
         delayStep = 0.1
-        def delayed(result, delay):
-            """try again, may we chow now?"""
-            noClaimCount = 0
-            delay += delayStep
-            for move in self.game.lastMoves():
-                # latest move first
-                if move.message == Message.Discard:
-                    break
-                elif move.message == Message.PopupMsg and move.msg == 'No Claim':
-                    noClaimCount += 1
-                    if noClaimCount == 2:
-                        # everybody said "I am not interested", so we claim chow now
-                        return result
-                elif move.message == Message.PopupMsg and move.msg in ('Pung', 'Kong'):
-                    # somebody said Pung or Kong, so we suppress our Chow
-                    return
-            if delay < self.game.ruleset.claimTimeout * 0.95:
-                # one of those slow humans is still thinking
-                return deferLater(reactor, delayStep, delayed, result, delay)
-            return result
-        self.computeSayable(move, answers)
+        self._computeSayable(move, answers)
         result = self.intelligence.selectAnswer(answers)
         if result[0] == Message.Chow:
-            # wait to see if somebody says Pung or Kong
-            return deferLater(reactor, delayStep, delayed, result, delay)
+            # self.game.debug('%s waits to see if somebody says Pung or Kong before saying chow' %
+            #     self.game.myself.name)
+            return deferLater(reactor, delayStep, self.__delayAnswer, result, delay, delayStep)
         return succeed(result)
 
     def thatWasMe(self, player):
@@ -330,18 +329,28 @@ class Client(pb.Referenceable):
             return False
         return player == self.game.myself
 
+    @staticmethod
+    def __convertMessage(value):
+        """the Message classes are not pb.copyable, convert them into their names"""
+        if isinstance(value, Message):
+            return value.name
+        if isinstance(value, tuple) and isinstance(value[0], Message):
+            if value[1] == None or value[1] == []:
+                return value[0].name
+            else:
+                return tuple(list([value[0].name] + list(value[1:])))
+        assert value is None, 'strange value:%s' % str(value)
+        return Message.OK.name
+
     def remote_move(self, playerName, command, *dummyArgs, **kwargs):
         """the server sends us info or a question and always wants us to answer"""
-        def convertMessage(value):
-            """the Message classes are not pb.copyable, convert them into their names"""
-            if isinstance(value, Message):
-                return value.name
-            if isinstance(value, tuple) and isinstance(value[0], Message):
-                return tuple(list([value[0].name] + list(value[1:])))
-            assert value is None, 'strange value:%s' % str(value)
-        player = None
         if self.game:
             player = self.game.playerByName(playerName)
+        elif playerName:
+            player = Player(None)
+            player.name = playerName
+        else:
+            player = None
         move = Move(player, command, kwargs)
         if Debug.traffic:
             if self.isHumanClient():
@@ -355,19 +364,21 @@ class Client(pb.Referenceable):
                 if move.token != self.game.handId(withAI=False):
                     logException( 'wrong token: %s, we have %s' % (move.token, self.game.handId()))
         with Duration('Move %s:' % move):
-            return self.exec_move(move).addCallback(convertMessage)
+            return self.exec_move(move).addCallback(self.__convertMessage)
 
     def exec_move(self, move):
         """mirror the move of a player as told by the the game server"""
-        if move.message.needsGame and not self.game:
+        message = move.message
+        if message.needsGame and not self.game:
             # server already disconnected, see HumanClient.remote_ServerDisconnects
-            return succeed(None)
-        answer = move.message.clientAction(self, move)
+            return succeed(Message.OK)
+        action = message.notifyAction if move.notifying else message.clientAction
+        answer = action(self, move)
         if not isinstance(answer, Deferred):
             answer = succeed(answer)
         game = self.game
         if game:
-            if move.player and not move.player.scoreMatchesServer(move.score):
+            if not move.notifying and move.player and not move.player.scoreMatchesServer(move.score):
                 game.close()
             game.moves.append(move)
 # This is an example how to find games where specific situations arise. We prefer games where this
@@ -376,8 +387,8 @@ class Client(pb.Referenceable):
 # robot players calls Pung. See https://bugs.kde.org/show_bug.cgi?id=318981
 #            if self.isHumanClient() and game.nextPlayer() == game.myself:
 #                # I am next
-#                if move.message == Message.PopupMsg and move.kwargs['msg'] == 'Pung':
-#                    # somebody said pung
+#                if message == Message.Pung and move.notifying:
+#                    # somebody claimed a pung
 #                    if move.player != game.myself:
 #                        # it was not me
 #                        if game.handctr == 0 and len(game.moves) < 30:
@@ -386,12 +397,12 @@ class Client(pb.Referenceable):
 #                                # I may say Chow
 #                                print('FOUND EXAMPLE IN:', game.handId(withMoveCount=True))
 
-        if move.message == Message.Discard:
+        if message == Message.Discard:
             # do not block here, we want to get the clientDialog
             # before the animated tile reaches its end position
             animate()
             return answer
-        elif move.message == Message.AskForClaims:
+        elif message == Message.AskForClaims:
             # no need to start an animation. If we did the below standard clause, this is what
             # could happen:
             # 1. user says Chow
@@ -412,8 +423,8 @@ class Client(pb.Referenceable):
         calledTileName = calledTile.element
         self.game.discardedTiles[calledTileName.lower()] -= 1
         assert calledTileName in move.source, '%s %s'% (calledTileName, move.source)
-        if InternalParameters.field:
-            InternalParameters.field.discardBoard.lastDiscarded = None
+        if Internal.field:
+            Internal.field.discardBoard.lastDiscarded = None
         move.player.lastTile = calledTileName.lower()
         move.player.lastSource = 'd'
         hadTiles = move.source[:]
@@ -425,7 +436,7 @@ class Client(pb.Referenceable):
             if move.message != Message.Kong:
                 # we will get a replacement tile first
                 return self.myAction(move)
-        elif self.game.prevActivePlayer == self.game.myself and self.connectedWithServer:
+        elif self.game.prevActivePlayer == self.game.myself and self.connection:
             # even here we ask: if our discard is claimed we need time
             # to notice - think 3 robots or network timing differences
             return self.ask(move, [Message.OK])
@@ -504,7 +515,7 @@ class Client(pb.Referenceable):
                     self.game.debug('%s may say Original Call' % myself)
                 return True
 
-    def computeSayable(self, move, answers):
+    def _computeSayable(self, move, answers):
         """find out what the player can legally say with this hand"""
         self.sayable = {}
         for message in Message.defined.values():

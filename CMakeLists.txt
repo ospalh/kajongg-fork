@@ -42,6 +42,7 @@ src/games.py
 src/genericdelegates.py
 src/guiutil.py
 src/humanclient.py
+src/login.py
 src/kde.py
 src/move.py
 src/modeltest.py
@@ -59,6 +60,7 @@ src/server.py
 src/sound.py
 src/tables.py
 src/tile.py
+src/uitile.py
 src/tileset.py
 src/tilesetselector.py
 src/tree.py

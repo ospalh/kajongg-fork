@@ -18,11 +18,11 @@ along with this program if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
-import sys
+import sys, weakref
 from collections import defaultdict
 
 from util import logException, logWarning, m18n, m18nc, m18nE
-from common import WINDS, InternalParameters, elements, IntDict, Debug
+from common import WINDS, Internal, elements, IntDict, Debug
 from query import Transaction, Query
 from tile import Tile
 from meld import Meld, CONCEALED, PUNG, hasChows, meldsContent
@@ -112,19 +112,31 @@ class Player(object):
     # pylint we need more than 40 public methods
 
     def __init__(self, game):
-        self.game = game
+        if game:
+            self._game = weakref.ref(game)
+        else:
+            self._game = None
         self.__balance = 0
         self.__payment = 0
         self.wonCount = 0
         self.name = ''
         self.wind = WINDS[0]
-        self.visibleTiles = IntDict(game.visibleTiles)
+        self.visibleTiles = IntDict(game.visibleTiles) if game else IntDict()
         self.clearHand()
         self.__lastSource = '1' # no source: blessing from heaven or earth
         self.ippatsu_chance = False  # First round after riichi-call?
-        self.remote = None # only for server
         self.voice = None
         self.handBoard = None
+
+    def __del__(self):
+        """break reference cycles"""
+        self.clearHand()
+
+    @property
+    def game(self):
+        """hide the fact that this is a weakref"""
+        if self._game:
+            return self._game()
 
     def speak(self, text):
         """speak if we have a voice"""
@@ -133,8 +145,8 @@ class Player(object):
     def clearHand(self):
         """clear player attributes concerning the current hand"""
         self.__concealedTileNames = []
-        self.__exposedMelds = []
-        self.__concealedMelds = []
+        self._exposedMelds = []
+        self._concealedMelds = []
         self.__bonusTiles = []
         self.discarded = []
         self.visibleTiles.clear()
@@ -159,148 +171,115 @@ class Player(object):
         """some source for the computation of current hand changed"""
         self.__hand = None
 
-    @apply
-    def hand():
+    @property
+    def hand(self):
         """a readonly tuple"""
-        def fget(self):
-            # pylint: disable=W0212
-            if not self.__hand:
-                self.__hand = self.computeHand()
-            return self.__hand
-        return property(**locals())
+        if not self.__hand:
+            self.__hand = self.computeHand()
+        return self.__hand
 
-    @apply
-    def bonusTiles():
+    @property
+    def bonusTiles(self):
         """a readonly tuple"""
-        def fget(self):
-            # pylint: disable=W0212
-            return tuple(self.__bonusTiles)
-        return property(**locals())
+        return tuple(self.__bonusTiles)
 
-    @apply
-    def concealedTileNames():
+    @property
+    def concealedTileNames(self):
         """a readonly tuple"""
-        def fget(self):
-            # pylint: disable=W0212
-            return tuple(self.__concealedTileNames)
-        return property(**locals())
+        return tuple(self.__concealedTileNames)
 
-    @apply
-    def exposedMelds():
+    @property
+    def exposedMelds(self):
         """a readonly tuple"""
-        def fget(self):
-            # pylint: disable=W0212
-            return tuple(self.__exposedMelds)
-        return property(**locals())
+        return tuple(self._exposedMelds)
 
-    @apply
-    def concealedMelds():
+    @property
+    def concealedMelds(self):
         """a readonly tuple"""
-        def fget(self):
-            # pylint: disable=W0212
-            return tuple(self.__concealedMelds)
-        return property(**locals())
+        return tuple(self._concealedMelds)
 
-    @apply
-    def mayWin():
-        """a readonly tuple"""
-        def fget(self):
-            # pylint: disable=W0212
-            return self.__mayWin
-        def fset(self, value):
-            # pylint: disable=W0212
-            if self.__mayWin != value:
-                self.__mayWin = value
-                self.__hand = None
-        return property(**locals())
+    @property
+    def mayWin(self):
+        """winning possible?"""
+        return self.__mayWin
 
-    @apply
-    def lastSource(): # pylint: disable=E0202
+    @mayWin.setter
+    def mayWin(self, value):
+        """winning possible?"""
+        if self.__mayWin != value:
+            self.__mayWin = value
+            self.__hand = None
+
+    @property
+    def lastSource(self):
         """the source of the last tile the player got"""
-        def fget(self):
-            # pylint: disable=W0212
-            return self.__lastSource
-        def fset(self, lastSource):
-            # pylint: disable=W0212
-            self.__lastSource = lastSource
-            if lastSource == 'd' and not self.game.wall.living:
-                self.__lastSource = 'Z'
-            if lastSource == 'w' and not self.game.wall.living:
-                self.__lastSource = 'z'
-        return property(**locals())
+        return self.__lastSource
 
-    @apply
-    def nameid():
+    @lastSource.setter
+    def lastSource(self, lastSource):
+        """the source of the last tile the player got"""
+        self.__lastSource = lastSource
+        if lastSource == 'd' and not self.game.wall.living:
+            self.__lastSource = 'Z'
+        if lastSource == 'w' and not self.game.wall.living:
+            self.__lastSource = 'z'
+
+    @property
+    def nameid(self):
         """the name id of this player"""
-        def fget(self):
-            return Players.allIds[self.name]
-        return property(**locals())
+        return Players.allIds[self.name]
 
-    @apply
-    def localName():
+    @property
+    def localName(self):
         """the localized name of this player"""
-        def fget(self):
-            return m18nc('kajongg, name of robot player, to be translated', self.name)
-        return property(**locals())
+        return m18nc('kajongg, name of robot player, to be translated', self.name)
 
-    def hasManualScore(self): # pylint: disable=R0201
-        """virtual: has a manual score been entered for this game?"""
-        # pylint does not recognize that this is overridden by
-        # an implementation that needs self
-        return False
-
-    @apply
-    def handTotal():
+    @property
+    def handTotal(self):
         """the hand total of this player"""
-        def fget(self):
-            if self.hasManualScore():
-                spValue = InternalParameters.field.scoringDialog.spValues[self.idx]
-                return spValue.value()
-            if not self.game.isScoringGame() and not self.game.winner:
-                return 0
-            return self.hand.total()
-        return property(**locals())
+        if not self.game.isScoringGame() and not self.game.winner:
+            return 0
+        return self.hand.total()
 
-    @apply
-    def balance():
+    @property
+    def balance(self):
         """the balance of this player"""
-        def fget(self):
-            # pylint: disable=W0212
-            return self.__balance
-        def fset(self, balance):
-            # pylint: disable=W0212
-            self.__balance = balance
-            self.__payment = 0
-        return property(**locals())
+        return self.__balance
 
-    @apply
-    def values():
+    @balance.setter
+    def balance(self, balance):
+        """the balance of this player"""
+        self.__balance = balance
+        self.__payment = 0
+
+    @property
+    def values(self):
         """the values that are still needed after ending a hand"""
-        def fget(self):
-            return self.name, self.wind, self.balance, self.voice
-        def fset(self, values):
-            self.name = values[0]
-            self.wind = values[1]
-            self.balance = values[2]
-            self.voice = values[3]
-        return property(**locals())
+        return self.name, self.wind, self.balance, self.voice
+
+    @values.setter
+    def values(self, values):
+        """the values that are still needed after ending a hand"""
+        self.name = values[0]
+        self.wind = values[1]
+        self.balance = values[2]
+        self.voice = values[3]
 
     def getsPayment(self, payment):
         """make a payment to this player"""
         self.__balance += payment
         self.__payment += payment
 
-    @apply
-    def payment():
+    @property
+    def payment(self):
         """the payments for the current hand"""
-        def fget(self):
-            # pylint: disable=W0212
-            return self.__payment
-        def fset(self, payment):
-            # pylint: disable=W0212
-            assert payment == 0
-            self.__payment = 0
-        return property(**locals())
+        return self.__payment
+
+    @payment.setter
+    def payment(self, payment):
+        """the payments for the current hand"""
+        assert payment == 0
+        self.__payment = 0
 
     def __repr__(self):
         return u'{name:<10} {wind}'.format(name=self.name[:10], wind=self.wind)
@@ -334,7 +313,7 @@ class Player(object):
             if tile.isBonus():
                 self.__bonusTiles.append(tile)
             else:
-                assert tileName.istitle()
+                assert tileName.istitle(), '%s data=%s' % (tile, data)
                 self.__concealedTileNames.append(tileName)
         self.__hand = None
         if data:
@@ -346,9 +325,9 @@ class Player(object):
         if len(meld.tiles) == 1 and meld[0].isBonus():
             self.__bonusTiles.append(meld[0])
         elif meld.state == CONCEALED and not meld.isKong():
-            self.__concealedMelds.append(meld)
+            self._concealedMelds.append(meld)
         else:
-            self.__exposedMelds.append(meld)
+            self._exposedMelds.append(meld)
         self.__hand = None
 
     def remove(self, tile=None, meld=None):
@@ -376,7 +355,7 @@ class Player(object):
     def removeMeld(self, meld):
         """remove a meld from this hand in a scoring game"""
         assert self.game.isScoringGame()
-        for melds in [self.__concealedMelds, self.__exposedMelds]:
+        for melds in [self._concealedMelds, self._exposedMelds]:
             for idx, myTile in enumerate(melds):
                 if id(myTile) == id(meld):
                     melds.pop(idx)
@@ -432,7 +411,7 @@ class Player(object):
 
     def hasExposedPungOf(self, tileName):
         """do I have an exposed Pung of tileName?"""
-        for meld in self.__exposedMelds:
+        for meld in self._exposedMelds:
             if meld.pairs == [tileName.lower()] * 3:
                 return True
         return False
@@ -441,7 +420,7 @@ class Player(object):
         """used for robbing the kong"""
         assert tileName.istitle()
         tileName = tileName.lower()
-        for meld in self.__exposedMelds:
+        for meld in self._exposedMelds:
             if tileName in meld.pairs:
                 meld.pairs.remove(tileName)
                 meld.meldtype = PUNG
@@ -449,7 +428,7 @@ class Player(object):
                 break
         else:
             raise Exception('robTile: no meld found with %s' % tileName)
-        if InternalParameters.field:
+        if Internal.field:
             hbTiles = self.handBoard.tiles
             self.game.lastDiscard = [x for x in hbTiles if x.element == tileName][-1]
             # remove from board of robbed player, otherwise syncHandBoard would
@@ -545,7 +524,7 @@ class Player(object):
         if len(allMeldTiles) == 4 and allMeldTiles[0].islower():
             tile0 = allMeldTiles[0].lower()
             # we are adding a 4th tile to an exposed pung
-            self.__exposedMelds = [meld for meld in self.__exposedMelds if meld.pairs != [tile0] * 3]
+            self._exposedMelds = [meld for meld in self._exposedMelds if meld.pairs != [tile0] * 3]
             meld = Meld(tile0 * 4)
             self.__concealedTileNames.remove(allMeldTiles[3])
             self.visibleTiles[tile0] += 1
@@ -557,7 +536,7 @@ class Player(object):
             for meldTile in allMeldTiles:
                 self.visibleTiles[meldTile.lower()] += 1
             meld.expose(bool(calledTile))
-        self.__exposedMelds.append(meld)
+        self._exposedMelds.append(meld)
         self.__hand = None
         game.computeDangerous(self)
         adding = [calledTile] if calledTile else None
@@ -568,7 +547,7 @@ class Player(object):
         """update the list of dangerous tile"""
         pName = self.localName
         dangerous = list()
-        expMeldCount = len(self.__exposedMelds)
+        expMeldCount = len(self._exposedMelds)
         if expMeldCount >= 3:
             if all(x in elements.greenHandTiles for x in self.visibleTiles):
                 dangerous.append((elements.greenHandTiles,
@@ -639,13 +618,6 @@ class Player(object):
             wonChar = 'x'
         return ''.join([wonChar, winds, lastSource, declaration])
 
-    def sortMeldsByX(self):
-        """sorts the melds by their position on screen"""
-        if self.game.isScoringGame():
-            # in a real game, the player melds do not have tiles
-            self.__concealedMelds = sorted(self.__concealedMelds, key=lambda x: x[0].xoffset)
-            self.__exposedMelds = sorted(self.__exposedMelds, key=lambda x: x[0].xoffset)
-
     def makeTileKnown(self, tileName):
         """used when somebody else discards a tile"""
         assert self.__concealedTileNames[0] == 'Xy'
@@ -654,14 +626,14 @@ class Player(object):
 
     def computeHand(self, withTile=None, robbedTile=None, dummy=None, asWinner=False):
         """returns Hand for this player"""
-        assert not (self.__concealedMelds and self.__concealedTileNames)
+        assert not (self._concealedMelds and self.__concealedTileNames)
         assert not isinstance(self.lastTile, Tile)
         assert not isinstance(withTile, Tile)
         melds = ['R' + ''.join(self.__concealedTileNames)]
         if withTile:
             melds[0] += withTile
-        melds.extend(x.joined for x in self.__exposedMelds)
-        melds.extend(x.joined for x in self.__concealedMelds)
+        melds.extend(x.joined for x in self._exposedMelds)
+        melds.extend(x.joined for x in self._concealedMelds)
         melds.extend(''.join(x.element) for x in self.__bonusTiles)
         mjString = self.mjString(asWinner)
         melds.append(mjString)
@@ -692,7 +664,7 @@ class Player(object):
         """returns a unique list of lists with possible claimable chow combinations"""
         if self.game.lastDiscard is None:
             return []
-        exposedChows = [x for x in self.__exposedMelds if x.isChow()]
+        exposedChows = [x for x in self._exposedMelds if x.isChow()]
         if len(exposedChows) >= self.game.ruleset.maxChows:
             return []
         if tileName is None:
@@ -705,7 +677,7 @@ class Player(object):
 
     def exposedChows(self):
         """returns a list of exposed chows"""
-        return [x for x in self.__exposedMelds if x.isChow()]
+        return [x for x in self._exposedMelds if x.isChow()]
 
     def possibleKongs(self):
         """returns a unique list of lists with possible kong combinations"""
@@ -716,7 +688,7 @@ class Player(object):
                 if self.__concealedTileNames.count(tileName) == 4:
                     kongs.append([tileName] * 4)
                 elif self.__concealedTileNames.count(tileName) == 1 and \
-                        tileName.lower() * 3 in list(x.joined for x in self.__exposedMelds):
+                        tileName.lower() * 3 in list(x.joined for x in self._exposedMelds):
                     kongs.append([tileName.lower()] * 3 + [tileName])
         if self.game.lastDiscard:
             # claiming a kong
@@ -746,25 +718,25 @@ class Player(object):
             melds.remove(lastMeld)
             self.lastTile = self.lastTile.lower()
             lastMeld.pairs.toLower()
-            self.__exposedMelds.append(lastMeld)
+            self._exposedMelds.append(lastMeld)
             for tileName in lastMeld.pairs:
                 self.visibleTiles[tileName] += 1
         else:
             melds = [Meld(x) for x in concealed.split()]
             self.lastTile = lastTile
             self.lastMeld = lastMeld
-        self.__concealedMelds = melds
+        self._concealedMelds = melds
         self.__concealedTileNames = []
         self.__hand = None
         self.syncHandBoard()
 
     def scoringString(self):
         """helper for HandBoard.__str__"""
-        if self.__concealedMelds:
-            parts = [x.joined for x in self.__concealedMelds + self.__exposedMelds]
+        if self._concealedMelds:
+            parts = [x.joined for x in self._concealedMelds + self._exposedMelds]
         else:
             parts = [''.join(self.__concealedTileNames)]
-            parts.extend([x.joined for x in self.__exposedMelds])
+            parts.extend([x.joined for x in self._exposedMelds])
         parts.extend(''.join(x.element) for x in self.__bonusTiles)
         return ' '.join(parts)
 

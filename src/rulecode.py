@@ -602,7 +602,7 @@ class TripleKnitting(Function):
     def shouldTry(self, hand, maxMissing=3):
         if hand.declaredMelds:
             return False
-        tripleWanted = 7 - maxMissing / 3 # count triples
+        tripleWanted = 7 - maxMissing // 3 # count triples
         tripleCount = len(self.findTriples(hand)[0])
         return tripleCount >= tripleWanted
 
@@ -652,7 +652,7 @@ class Knitting(Function):
     def shouldTry(self, hand, maxMissing=4):
         if hand.declaredMelds:
             return False
-        pairWanted = 7 - maxMissing / 2 # count pairs
+        pairWanted = 7 - maxMissing // 2 # count pairs
         pairCount = len(self.findCouples(hand)[0])
         return pairCount >= pairWanted
 
@@ -767,10 +767,8 @@ class AllPairHonors(Function):
                 pairCount += 1
             elif count == 4:
                 kongCount += 1
-        pairWanted = 7 - maxMissing / 2 # count pairs
+        pairWanted = 7 - maxMissing // 2 # count pairs
         result = pairCount >= pairWanted or (pairCount + kongCount * 2) > pairWanted
-        if pairCount > 5:
-            hand.debug('have %d pairs for allpairhonors: %s' % (pairCount, hand.tileNames))
         return result
     @staticmethod
     def rearrange(dummyHand, pairs):

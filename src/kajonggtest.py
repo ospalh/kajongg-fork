@@ -26,11 +26,25 @@ from optparse import OptionParser
 from common import Debug
 from util import removeIfExists
 
+def neutralize(rows):
+    """remove things we do not want to compare"""
+    for row in rows:
+        for idx, field in enumerate(row):
+            if field.startswith('Tester '):
+                row[idx] = 'Tester'
+            if 'MEM' in field:
+                parts = field.split(',')
+                for part in parts[:]:
+                    if part.startswith('MEM'):
+                        parts.remove(part)
+                row[idx] = ','.join(parts)
+        yield row
+
 def readGames(csvFile):
     """returns a dict holding a frozenset of games for each AI variant"""
     if not os.path.exists(csvFile):
         return
-    allRows = list(csv.reader(open(csvFile,'r'), delimiter=';'))
+    allRows = neutralize(csv.reader(open(csvFile,'r'), delimiter=';'))
     if not allRows:
         return
     # we want unique tuples so we can work with sets
@@ -164,7 +178,7 @@ def doJobs(jobs, options, serverProcesses):
                 aiVariant, game = jobs.pop(0)
                 # never login to the same server twice at the
                 # same time with the same player name
-                player = int(qIdx / len(serverProcesses)) + 1
+                player = qIdx // len(serverProcesses) + 1
                 cmd = ['{src}/kajongg.py'.format(src=srcDir),
                       '--game={game}'.format(game=game),
                       '--socket={sock}'.format(sock=serverProcesses[srvIdx][1]),
@@ -210,8 +224,8 @@ def parse_options():
             ' Without this, random values are used.',
         metavar='GAMEID', type=int, default=0)
     parser.add_option('', '--count', dest='count',
-        help='play COUNT games',
-        metavar='COUNT', type=int, default=0)
+        help='play COUNT games. Default is 99999',
+        metavar='COUNT', type=int, default=99999)
     parser.add_option('', '--playopen', dest='playopen', action='store_true',
         help='all robots play with visible concealed tiles' , default=False)
     parser.add_option('', '--clients', dest='clients',

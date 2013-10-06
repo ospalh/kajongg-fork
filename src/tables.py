@@ -18,7 +18,7 @@ along with this program if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
-import datetime, random
+import datetime
 
 from kde import KIcon, KDialogButtonBox
 from PyQt4.QtCore import Qt, QVariant, \
@@ -31,13 +31,12 @@ from kde import KApplication
 
 from genericdelegates import RichTextColumnDelegate
 
-from util import logWarning, m18n, m18nc, m18nE, logDebug
+from util import m18n, m18nc, m18nE, logDebug
 from statesaver import StateSaver
 from rule import Ruleset
 from guiutil import ListComboBox, MJTableView
 from differ import RulesetDiffer
-from common import InternalParameters, Debug
-from client import ClientTable
+from common import Internal, Debug
 from modeltest import ModelTest
 from chat import ChatMessage, ChatWindow
 
@@ -46,6 +45,7 @@ class TablesModel(QAbstractTableModel):
     def __init__(self, tables, parent = None):
         super(TablesModel, self).__init__(parent)
         self.tables = tables
+        assert isinstance(tables, list)
 
     def headerData(self, section, orientation, role=Qt.DisplayRole): # pylint: disable=R0201
         """show header"""
@@ -128,7 +128,7 @@ class TablesModel(QAbstractTableModel):
 
 class SelectRuleset(QDialog):
     """a dialog for selecting a ruleset"""
-    def __init__(self, server):
+    def __init__(self, server=None):
         QDialog.__init__(self, None)
         self.setWindowTitle(m18n('Select a ruleset') + ' - Kajongg')
         self.buttonBox = KDialogButtonBox(self)
@@ -157,16 +157,16 @@ class TableList(QWidget):
         self.view = MJTableView(self)
         self.differ = None
         self.debugModelTest = None
-        self.__requestedNewTable = False
+        self.requestedNewTable = False
         self.view.setItemDelegateForColumn(2, RichTextColumnDelegate(self.view))
 
         buttonBox = QDialogButtonBox(self)
         self.newButton = buttonBox.addButton(m18nc('allocate a new table', "&New"), QDialogButtonBox.ActionRole)
         self.newButton.setIcon(KIcon("document-new"))
         self.newButton.setToolTip(m18n("Allocate a new table"))
-        self.newButton.clicked.connect(self.newTable)
+        self.newButton.clicked.connect(self.client.newTable)
         self.joinButton = buttonBox.addButton(m18n("&Join"), QDialogButtonBox.AcceptRole)
-        self.joinButton.clicked.connect(self.joinTable)
+        self.joinButton.clicked.connect(client.joinTable)
         self.joinButton.setIcon(KIcon("list-add-user"))
         self.joinButton.setToolTip(m18n("Join a table"))
         self.leaveButton = buttonBox.addButton(m18n("&Leave"), QDialogButtonBox.AcceptRole)
@@ -193,14 +193,20 @@ class TableList(QWidget):
         layout.addLayout(cmdLayout)
         self.setLayout(layout)
 
-        self.view.doubleClicked.connect(self.joinTable)
+        self.view.doubleClicked.connect(client.joinTable)
         StateSaver(self, self.view.horizontalHeader())
         self.updateButtonsForTable(None)
 
     def hideEvent(self, dummyEvent): # pylint: disable=R0201
         """table window hides"""
-        field = InternalParameters.field
+        field = Internal.field
         field.startingGame = False
+        model = self.view.model()
+        if model:
+            for table in model.tables:
+                if table.chatWindow:
+                    table.chatWindow.hide()
+                    table.chatWindow = None
         if not field.game or field.game.client != self.client:
             # do we still need this connection?
             self.client.logout()
@@ -217,8 +223,8 @@ class TableList(QWidget):
         table = self.selectedTable()
         if not table.chatWindow:
             line = m18nE('opens a chat window')
-            msg = ChatMessage(table.tableid, table.client.username, line, isStatusMessage=True)
-            table.client.sendChat(msg).addCallback(initChat).addErrback(self.tableError)
+            msg = ChatMessage(table.tableid, table.client.name, line, isStatusMessage=True)
+            table.client.sendChat(msg).addCallback(initChat).addErrback(self.client.tableError)
         elif table.chatWindow.isVisible():
             table.chatWindow.hide()
         else:
@@ -226,12 +232,11 @@ class TableList(QWidget):
 
     def show(self):
         """prepare the view and show it"""
-        assert not InternalParameters.demo
         if self.client.hasLocalServer():
             title = m18n('Local Games with Ruleset %1', self.client.ruleset.name)
         else:
-            title = m18n('Tables at %1', self.client.url)
-        self.setWindowTitle(' - '.join([self.client.username, title, 'Kajongg']))
+            title = m18n('Tables at %1', self.client.connection.url)
+        self.setWindowTitle(' - '.join([self.client.name, title, 'Kajongg']))
         self.view.hideColumn(1)
         tableCount = self.view.model().rowCount(None) if self.view.model() else 0
         self.view.showColumn(0)
@@ -243,10 +248,6 @@ class TableList(QWidget):
                 self.view.hideColumn(0)
                 self.view.hideColumn(2)
                 self.view.hideColumn(4)
-
-    def newLocalTable(self, newId):
-        """we just got newId from the server"""
-        self.client.callServer('startGame', newId).addErrback(self.tableError)
 
     def selectTable(self, idx):
         """select table by idx"""
@@ -261,8 +262,8 @@ class TableList(QWidget):
         suspendedLocalGame = suspended and table.gameid and self.client.hasLocalServer()
         self.joinButton.setEnabled(hasTable and
             not running and
-            not table.isOnline(self.client.username) and
-            (self.client.username in table.playerNames) == suspended)
+            not table.isOnline(self.client.name) and
+            (self.client.name in table.playerNames) == suspended)
         self.leaveButton.setVisible(not (suspendedLocalGame))
         self.compareButton.setVisible(not (suspendedLocalGame))
         self.startButton.setVisible(not suspended)
@@ -276,10 +277,11 @@ class TableList(QWidget):
             self.joinButton.setToolTip(m18n("Join a table"))
         self.leaveButton.setEnabled(hasTable and not running and not self.joinButton.isEnabled())
         self.startButton.setEnabled(not running and not suspendedLocalGame and hasTable \
-            and self.client.username == table.playerNames[0])
+            and self.client.name == table.playerNames[0])
         self.compareButton.setEnabled(hasTable and table.myRuleset is None)
         self.chatButton.setVisible(not self.client.hasLocalServer())
-        self.chatButton.setEnabled(not running and self.leaveButton.isEnabled())
+        self.chatButton.setEnabled(not running and hasTable and self.client.name in table.playerNames
+            and sum(x.startswith('Robot ') for x in table.playerNames) < 3)
         if self.chatButton.isEnabled():
             self.chatButton.setToolTip(m18n("Chat with others on this table"))
         else:
@@ -290,63 +292,12 @@ class TableList(QWidget):
         if selected.indexes():
             self.selectTable(selected.indexes()[0].row())
 
-    @staticmethod
-    def __wantedGame():
-        """find out which game we want to start on the table"""
-        result = InternalParameters.game
-        if not result or result == '0':
-            result = str(int(random.random() * 10**9))
-        InternalParameters.game = None
-        return result
-
-    def newTable(self):
-        """I am a slot"""
-        if InternalParameters.ruleset:
-            ruleset = InternalParameters.ruleset
-        elif self.client.hasLocalServer():
-            ruleset = self.client.ruleset
-        else:
-            selectDialog = SelectRuleset(self.client.host)
-            if not selectDialog.exec_():
-                return
-            ruleset = selectDialog.cbRuleset.current
-        deferred = self.client.callServer('newTable', ruleset.toList(),
-            InternalParameters.playOpen, InternalParameters.demo, self.__wantedGame()).addErrback(self.tableError)
-        if self.client.hasLocalServer():
-            deferred.addCallback(self.newLocalTable)
-        self.__requestedNewTable = True
-
-    def gotTables(self, tables):
-        """got tables for first time. If we play a local game and we have no
-        suspended game, automatically start a new one"""
-        clientTables = list(ClientTable(self.client, *x) for x in tables) # pylint: disable=W0142
-        if not InternalParameters.demo:
-            if self.client.hasLocalServer():
-                # when playing a local game, only show pending tables with
-                # previously selected ruleset
-                clientTables = list(x for x in clientTables if x.ruleset == self.client.ruleset)
-        if InternalParameters.demo or (not clientTables and self.client.hasLocalServer()):
-            deferred = self.client.callServer('newTable', self.client.ruleset.toList(), InternalParameters.playOpen,
-                InternalParameters.demo,
-                self.__wantedGame()).addErrback(self.tableError)
-            if deferred:
-                deferred.addCallback(self.newLocalTable)
-        else:
-            self.client.tables = clientTables
-            self.loadTables(clientTables)
-            self.show()
-
     def selectedTable(self):
         """returns the selected table"""
         if self.view.selectionModel():
             index = self.view.selectionModel().currentIndex()
             if index.isValid() and self.view.model():
                 return self.view.model().tables[index.row()]
-
-    def joinTable(self):
-        """join a table"""
-        table = self.selectedTable()
-        self.client.callServer('joinTable', table.tableid).addErrback(self.tableError)
 
     def compareRuleset(self):
         """compare the ruleset of this table against ours"""
@@ -358,24 +309,12 @@ class TableList(QWidget):
         """start playing at the selected table"""
         table = self.selectedTable()
         self.startButton.setEnabled(False)
-        self.client.callServer('startGame', table.tableid).addErrback(self.tableError)
-
-    def tableError(self, err):
-        """log the twisted error"""
-        if not self.client.connectedWithServer:
-            # lost connection to server
-            for table in self.view.model().tables:
-                if table.chatWindow:
-                    table.chatWindow.hide()
-            self.hide()
-            self.client.tableList = None
-        else:
-            logWarning(err.getErrorMessage())
+        self.client.callServer('startGame', table.tableid).addErrback(self.client.tableError)
 
     def leaveTable(self):
         """leave a table"""
         table = self.selectedTable()
-        self.client.callServer('leaveTable', table.tableid).addErrback(self.tableError)
+        self.client.callServer('leaveTable', table.tableid).addErrback(self.client.tableError)
 
     def __keepChatWindows(self, tables):
         """copy chatWindows from the old table list which will be thrown away"""
@@ -399,11 +338,14 @@ class TableList(QWidget):
           select that again
         else:
           select first table"""
-        if self.__requestedNewTable:
-            self.__requestedNewTable = False
-            newIds = sorted(list(set(x.tableid for x in tables) - set(x.tableid for x in self.view.model().tables)))
-            if newIds:
-                return newIds[0]
+        if self.requestedNewTable:
+            self.requestedNewTable = False
+            model = self.view.model()
+            if model:
+                oldIds = set(x.tableid for x in model.tables)
+                newIds = sorted(list(set(x.tableid for x in tables) - oldIds))
+                if newIds:
+                    return newIds[0]
         if self.selectedTable():
             return self.selectedTable().tableid
         return 0
@@ -414,13 +356,11 @@ class TableList(QWidget):
         tables that also exist locally. In theory all suspended games should
         exist locally but there might have been bugs or somebody might
         have removed the local database like when reinstalling linux"""
-        if not InternalParameters.field:
+        if not Internal.field:
             return
         if Debug.traffic:
             for table in tables:
-                if not table.gameid:
-                    logDebug('%s has no gameid' % table)
-                elif not table.gameExistsLocally():
+                if table.gameid and not table.gameExistsLocally():
                     logDebug('%s does not exist locally' % table)
         tables = [x for x in tables if not x.gameid or x.gameExistsLocally()]
         tables.sort(key=lambda x: x.tableid)

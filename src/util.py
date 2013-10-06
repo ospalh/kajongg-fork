@@ -35,9 +35,9 @@ SERVERMARK = '&&SERVER&&'
 
 # util must not import twisted or we need to change kajongg.py
 
-from common import InternalParameters, Debug
+from common import Options, Internal, Debug
 
-if InternalParameters.haveKDE:
+if Internal.haveKDE:
     from kde import i18n, i18nc, Sorry, Information, NoPrompt
 else:
     # a server might not have KDE4
@@ -57,10 +57,10 @@ else:
         """dummy for server"""
         return i18n(englishIn, *args)
 
-if not InternalParameters.isServer:
+if not Internal.isServer:
     from kde import KGlobal
 else:
-    class PrintFirstArg:
+    class PrintFirstArg(object):
         """just print the first argument"""
         def __init__(self, *args):
             kprint(args[0])
@@ -68,7 +68,7 @@ else:
 
 def appdataDir():
     """the per user directory with kajongg application information like the database"""
-    if InternalParameters.isServer:
+    if Internal.isServer:
         # the server might or might not have KDE installed, so to be on
         # the safe side we use our own .kajonggserver directory
         # the following code moves an existing kajonggserver.db to .kajonggserver
@@ -95,7 +95,7 @@ def appdataDir():
 
 def cacheDir():
     """the cache directory for this user"""
-    if InternalParameters.isServer:
+    if Internal.isServer:
         result = os.path.join(appdataDir(), 'cache')
     else:
         result = os.path.dirname(unicode(KGlobal.dirs().locateLocal("cache", "")))
@@ -182,11 +182,11 @@ def logMessage(msg, prio, showDialog, showStack=False, withGamePrefix=True):
         msg = unicode(str(msg), 'utf-8')
     msg = translateServerMessage(msg)
     logMsg = msg
-    if withGamePrefix and InternalParameters.logPrefix:
+    if withGamePrefix and Internal.logPrefix:
         if Debug.process:
-            logMsg = '%s%d: %s' % (InternalParameters.logPrefix, os.getpid(), msg)
+            logMsg = '%s%d: %s' % (Internal.logPrefix, os.getpid(), msg)
         else:
-            logMsg = '%s: %s' % (InternalParameters.logPrefix, msg)
+            logMsg = '%s: %s' % (Internal.logPrefix, msg)
     __logUnicodeMessage(prio, logMsg)
     if showStack:
         for line in traceback.format_stack()[2:-3]:
@@ -256,8 +256,8 @@ def socketName():
     serverDir = os.path.expanduser('~/.kajonggserver')
     if not os.path.exists(serverDir):
         appdataDir() # allocate the directory and possibly move old databases there
-    if InternalParameters.socket:
-        return InternalParameters.socket
+    if Options.socket:
+        return Options.socket
     else:
         return os.path.join(serverDir, 'socket')
 
@@ -325,7 +325,7 @@ def kprint(*args, **kwargs):
     # we need * magic: pylint: disable=W0142
     try:
         print(*newArgs, sep=kwargs.get('sep', ' '), end=kwargs.get('end', '\n'), file=kwargs.get('file'))
-    except IOError, exception:
+    except IOError as exception:
         # very big konsole, busy system: sometimes Python says
         # resource temporarily not available
         time.sleep(0.1)
@@ -355,3 +355,37 @@ class Duration(object):
                 logException(msg)
             else:
                 logDebug(msg)
+
+def checkMemory():
+    """as the name says"""
+    #pylint: disable=R0912
+    if not Debug.gc:
+        return
+    gc.set_threshold( 0 )
+    gc.set_debug( gc.DEBUG_LEAK )
+    gc.enable()
+    logDebug('collecting {{{')
+    gc.collect()        # we want to eliminate all output
+    logDebug('}}} done')
+
+    # code like this may help to find specific things
+    if True:
+        interesting = ('Client', 'Player', 'Game')
+        for obj in gc.garbage:
+            if hasattr(obj, 'cell_contents'):
+                obj = obj.cell_contents
+            if not any(x in repr(obj) for x in interesting):
+                continue
+            for referrer in gc.get_referrers(obj):
+                if referrer is gc.garbage:
+                    continue
+                if hasattr(referrer, 'cell_contents'):
+                    referrer = referrer.cell_contents
+                if referrer.__class__.__name__ in interesting:
+                    for referent in gc.get_referents(referrer):
+                        logDebug('%s refers to %s' % (referrer, referent))
+                else:
+                    logDebug('referrer of %s/%s is: id=%s type=%s %s' % (
+                        type(obj), obj, id(referrer), type(referrer), referrer))
+    logDebug('unreachable:%s' % gc.collect())
+    gc.set_debug(0)

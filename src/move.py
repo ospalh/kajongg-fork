@@ -21,15 +21,15 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 from message import Message
 from meld import Meld
 
-class Move(object): #pylint: disable=R0902
+class Move(object):
     """used for decoded move information from the game server"""
-# pylint allow more than 7 instance attributes
     def __init__(self, player, command, kwargs):
         if isinstance(command, Message):
             self.message = command
         else:
             self.message = Message.defined[command]
         self.table = None
+        self.notifying = False
         self.player = player
         self.token = kwargs['token']
         self.kwargs = kwargs.copy()
@@ -41,11 +41,27 @@ class Move(object): #pylint: disable=R0902
         if self.lastMeld:
             self.lastMeld = Meld(self.lastMeld)
 
-    def __unicode__(self):
-        result = u'%s %s' % (self.player, self.message)
-        for key, value in self.kwargs.items():
-            result += ' %s:%s' % (key, value)
+    @staticmethod
+    def prettyKwargs(kwargs):
+        """this is also used by the server, but the server does not use class Move"""
+        result = ''
+        for key, value in kwargs.items():
+            if key == 'token':
+                continue
+            if isinstance(value, bool) and value:
+                result += ' %s' % key
+            elif isinstance(value, bool):
+                pass
+            elif isinstance(value, list) and isinstance(value[0], basestring):
+                result += ' %s:%s' % (key, ','.join(value))
+            else:
+                result += ' %s:%s' % (key, value)
+        result = result.replace("('", "(").replace("')", ")").replace(" '", "").replace(
+                "',", ",").replace("[(", "(").replace("])", ")")
         return result
+
+    def __unicode__(self):
+        return u'%s %s%s' % (self.player, self.message, Move.prettyKwargs(self.kwargs))
 
     def __repr__(self):
         return '<Move: %s>' % unicode(self)

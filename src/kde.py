@@ -38,9 +38,9 @@ from PyKDE4.kdeui import KMessageBox, KIcon, KLineEdit, \
 from twisted.internet.defer import Deferred, succeed
 
 import common
-from common import InternalParameters, isAlive
+from common import Internal, isAlive
 
-class IgnoreEscape:
+class IgnoreEscape(object):
     """as the name says. Use as a mixin for dialogs"""
     # pylint: disable=W0232
     # we do not need __init__
@@ -59,7 +59,20 @@ class DialogIgnoringEscape(QDialog, IgnoreEscape):
 class KDialogIgnoringEscape(KDialog, IgnoreEscape):
     """as the name says"""
 
-class MustChooseDialog(KDialogIgnoringEscape):
+class MustChooseDialog(DialogIgnoringEscape):
+    """this dialog can only be closed if a choice has been done"""
+    def __init__(self, parent=None):
+        DialogIgnoringEscape.__init__(self, parent)
+        self.chosen = None
+
+    def closeEvent(self, event):
+        """allow close only if a choice has been done"""
+        if self.chosen is not None:
+            event.accept()
+        else:
+            event.ignore()
+
+class MustChooseKDialog(KDialogIgnoringEscape):
     """this dialog can only be closed if a choice has been done"""
     def __init__(self, parent=None):
         KDialogIgnoringEscape.__init__(self, parent)
@@ -72,14 +85,14 @@ class MustChooseDialog(KDialogIgnoringEscape):
         else:
             event.ignore()
 
-class Prompt(MustChooseDialog):
+class Prompt(MustChooseKDialog):
     """common code for things like QuestionYesNo, Information"""
     def __init__(self, msg, icon=QMessageBox.Information, buttons=KDialog.Ok, caption=None, default=None):
         """buttons is button codes or-ed like KDialog.Ok | KDialog.Cancel. First one is default."""
         self.msg = msg
         self.default = default
-        if InternalParameters.field:
-            MustChooseDialog.__init__(self, InternalParameters.field)
+        if Internal.field:
+            MustChooseKDialog.__init__(self, Internal.field)
             self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
             if caption:
                 caption += ' - Kajongg'
@@ -103,20 +116,24 @@ class DeferredDialog(Deferred):
         self.dlg = dlg
         self.modal = modal
         self.always = always
-        if InternalParameters.field:
-            self.dlg.buttonClicked.connect(self.clicked)
-        if InternalParameters.reactor:
-            InternalParameters.reactor.callLater(0, self.__execute)
+        if Internal.field:
+            if hasattr(self.dlg, 'buttonClicked'):
+                self.dlg.buttonClicked.connect(self.clicked)
+            else:
+                self.dlg.accepted.connect(self.clicked)
+                self.dlg.rejected.connect(self.cancel)
+        if Internal.reactor:
+            # pylint: disable=E1101
+            Internal.reactor.callLater(0, self.__execute)
         else:
             # we do not yet have a reactor in initDb()
             self.__execute()
 
     def __execute(self):
         """now do the actual action"""
-        assert self.dlg
         if self.dlg is None:
             return
-        field = InternalParameters.field
+        field = Internal.field
         if not field or not isAlive(self.dlg):
             return self.autoAnswer()
         autoPlay = field.game and field.game.autoPlay
@@ -126,13 +143,14 @@ class DeferredDialog(Deferred):
         else:
             self.dlg.show()
         if autoAnswerDelayed:
-            InternalParameters.reactor.callLater(common.Preferences.animationDuration()/ 500.0,
+            # pylint: disable=E1101
+            Internal.reactor.callLater(common.Preferences.animationDuration()/ 500.0,
                 self.autoAnswer)
 
     def autoAnswer(self):
         """autoPlay gets autoAnswer"""
         result = self.dlg.returns()
-        if InternalParameters.field and isAlive(self.dlg):
+        if Internal.field and isAlive(self.dlg):
             self.dlg.hide()
         self.dlg = None
         self.callback(result)
@@ -146,29 +164,40 @@ class DeferredDialog(Deferred):
             self.dlg = None
             self.callback(result)
 
+    def cancel(self):
+        """we want no answer, just let the dialog disappear"""
+        if self.dlg:
+            self.dlg.hide()
+        self.dlg = None
+        Deferred.cancel(self)
+
 class QuestionYesNo(DeferredDialog):
     """wrapper, see class Prompt"""
-    def __init__(self, msg, always=False):
-        dialog = Prompt(msg, icon=QMessageBox.Question, buttons=KDialog.Yes | KDialog.No, default=KDialog.Yes)
-        DeferredDialog.__init__(self, dialog, always=always)
+    def __init__(self, msg, modal=True, always=False, caption=None):
+        dialog = Prompt(msg, icon=QMessageBox.Question,
+            buttons=KDialog.Yes | KDialog.No, default=KDialog.Yes, caption=caption)
+        DeferredDialog.__init__(self, dialog, modal=modal, always=always)
 
 class WarningYesNo(DeferredDialog):
     """wrapper, see class Prompt"""
-    def __init__(self, msg):
-        dialog = Prompt(msg, icon=QMessageBox.Warning, buttons=KDialog.Yes | KDialog.No, default=KDialog.Yes)
-        DeferredDialog.__init__(self, dialog)
+    def __init__(self, msg, modal=True, caption=None):
+        dialog = Prompt(msg, icon=QMessageBox.Warning,
+            buttons=KDialog.Yes | KDialog.No, default=KDialog.Yes, caption=caption)
+        DeferredDialog.__init__(self, dialog, modal=modal)
 
 class Information(DeferredDialog):
     """wrapper, see class Prompt"""
-    def __init__(self, msg, modal=True):
-        dialog = Prompt(msg, icon=QMessageBox.Information, buttons=KDialog.Ok)
+    def __init__(self, msg, modal=True, caption=None):
+        dialog = Prompt(msg, icon=QMessageBox.Information,
+            buttons=KDialog.Ok, caption=caption)
         DeferredDialog.__init__(self, dialog, modal=modal)
 
 class Sorry(DeferredDialog):
     """wrapper, see class Prompt"""
-    def __init__(self, msg):
-        dialog = Prompt(msg, icon=QMessageBox.Information, buttons=KDialog.Ok, caption='Sorry')
-        DeferredDialog.__init__(self, dialog)
+    def __init__(self, msg, modal=True, caption=None):
+        dialog = Prompt(msg, icon=QMessageBox.Information,
+            buttons=KDialog.Ok, caption=caption or 'Sorry')
+        DeferredDialog.__init__(self, dialog, modal=modal)
 
 def NoPrompt(dummyMsg):
     """we just want to be able to add callbacks even if non-interactive"""

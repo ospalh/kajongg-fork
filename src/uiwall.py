@@ -18,12 +18,13 @@ along with this program if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
-from common import InternalParameters, Preferences, ZValues
+from common import Internal, Preferences, ZValues
 from PyQt4.QtCore import QRectF, QPointF
 from PyQt4.QtGui import QGraphicsSimpleTextItem
 
 from board import PlayerWind, YellowText, Board, rotateCenter
 from game import Wall
+from uitile import UITile
 from animation import animate, afterCurrentAnimationDo, Animated, \
     ParallelAnimationGroup
 
@@ -44,15 +45,14 @@ class UIWallSide(Board):
         Board.__init__(self, length, 1, tileset, boardRotation=boardRotation)
         self.length = length
 
-    # pylint: disable=R0201
     def name(self):
         """name for debug messages"""
-        game = InternalParameters.field.game
+        game = Internal.field.game
         if not game:
             return 'NOGAME'
         for player in game.players:
             if player.front == self:
-                return 'wallside %s'% player.name
+                return 'wall %s'% player.name
 
     def center(self):
         """returns the center point of the wall in relation to the faces of the upper level"""
@@ -62,27 +62,34 @@ class UIWallSide(Board):
         result.setX(result.x() + faceRect.height()/2) # corner tile
         return result
 
+    def hide(self):
+        """hide all my parts"""
+        self.windTile.hide()
+        self.nameLabel.hide()
+        Board.hide(self)
+
 class UIWall(Wall):
     """
     Representation of the wall with four sides.
 
     Representation of the wall with four sides. self.wall[] indexes
     them counter clockwise, 0..3. 0 is bottom. N.B. """
+    tileClass = UITile
     def __init__(self, game):
         """init and position the wall"""
         # we use only white dragons for building the wall. We could actually
         # use any tile because the face is never shown anyway.
         game.wall = self
         Wall.__init__(self, game)
-        self.__square = Board(1, 1, InternalParameters.field.tileset)
+        self.__square = Board(1, 1, Internal.field.tileset)
         self.__square.setZValue(ZValues.marker)
         sideLength = len(self.tiles) // 8
-        self.__sides = [UIWallSide(InternalParameters.field.tileset, boardRotation, sideLength) \
+        self.__sides = [UIWallSide(Internal.field.tileset, boardRotation, sideLength) \
             for boardRotation in (0, 270, 180, 90)]
         for side in self.__sides:
             side.setParentItem(self.__square)
             side.lightSource = self.lightSource
-            side.windTile = PlayerWind('E', InternalParameters.field.windTileset, parent=side)
+            side.windTile = PlayerWind('E', Internal.field.windTileset, parent=side)
             side.windTile.hide()
             side.nameLabel = QGraphicsSimpleTextItem('', side)
             font = side.nameLabel.font()
@@ -97,10 +104,10 @@ class UIWall(Wall):
         self.__sides[2].setPos(xHeight=1, xWidth=sideLength, yHeight=1)
         self.__sides[1].setPos(xWidth=sideLength, yWidth=sideLength, yHeight=1 )
         self.showShadows = Preferences.showShadows
-        InternalParameters.field.centralScene.addItem(self.__square)
+        Internal.field.centralScene.addItem(self.__square)
 
-    # pylint: disable=R0201
-    def name(self):
+    @staticmethod
+    def name():
         """name for debug messages"""
         return 'wall'
 
@@ -122,21 +129,16 @@ class UIWall(Wall):
 
     def hide(self):
         """hide all four walls and their decorators"""
+        self.living = []
+        self.kongBox = []
         for side in self.__sides:
-            side.windTile.hide()
-            side.nameLabel.hide()
             side.hide()
-            del side
-        for tile in self.tiles:
-            if tile.graphics:
-                tile.graphics.hide()
-            del tile
         self.tiles = []
-        InternalParameters.field.centralScene.removeItem(self.__square)
+        Internal.field.centralScene.removeItem(self.__square)
 
     def __shuffleTiles(self):
         """shuffle tiles for next hand"""
-        discardBoard = InternalParameters.field.discardBoard
+        discardBoard = Internal.field.discardBoard
         places = [(x, y) for x in range(-3, discardBoard.width+3) for y in range(-3, discardBoard.height+3)]
         places = self.game.randomGenerator.sample(places, len(self.tiles))
         for idx, tile in enumerate(self.tiles):
@@ -149,7 +151,7 @@ class UIWall(Wall):
         for tile in self.tiles:
             tile.element = 'Xy'
             tile.dark = True
-#        field = InternalParameters.field
+#        field = Internal.field
 #        animateBuild = not field.game.isScoringGame() and not self.game.isFirstHand()
         animateBuild = False
         with Animated(animateBuild):
@@ -179,61 +181,56 @@ class UIWall(Wall):
         self.__setDrawingOrder()
         return animate()
 
-    @apply
-    def lightSource():
-        """setting this actually changes the visuals. For
-        possible values see LIGHTSOURCES"""
-        def fget(self):
-            # pylint: disable=W0212
-            return self.__square.lightSource
-        def fset(self, lightSource):
-            # pylint: disable=W0212
-            if self.lightSource != lightSource:
-                assert ParallelAnimationGroup.current is None
-                self.__square.lightSource = lightSource
-                for side in self.__sides:
-                    side.lightSource = lightSource
-                self.__setDrawingOrder()
-        return property(**locals())
+    @property
+    def lightSource(self):
+        """For possible values see LIGHTSOURCES"""
+        return self.__square.lightSource
 
-    @apply
-    def tileset():
-        """setting this actually changes the visuals."""
-        def fget(self):
-            # pylint: disable=W0212
-            return self.__square.tileset
-        def fset(self, value):
-            # pylint: disable=W0212
-            if self.tileset != value:
-                assert ParallelAnimationGroup.current is None
-                self.__square.tileset = value
-                for side in self.__sides:
-                    side.tileset = value
-                self.__resizeHandBoards()
-        return property(**locals())
+    @lightSource.setter
+    def lightSource(self, lightSource):
+        """setting this actually changes the visuals"""
+        if self.lightSource != lightSource:
+            assert ParallelAnimationGroup.current is None
+            self.__square.lightSource = lightSource
+            for side in self.__sides:
+                side.lightSource = lightSource
+            self.__setDrawingOrder()
 
-    @apply
-    # pylint: disable=E0202
-    def showShadows():
+    @property
+    def tileset(self):
+        """The tileset of this wall"""
+        return self.__square.tileset
+
+    @tileset.setter
+    def tileset(self, value):
         """setting this actually changes the visuals."""
-        def fget(self):
-            # pylint: disable=W0212
-            return self.__square.showShadows
-        def fset(self, showShadows):
-            # pylint: disable=W0212
-            if self.showShadows != showShadows:
-                assert ParallelAnimationGroup.current is None
-                self.__square.showShadows = showShadows
-                for side in self.__sides:
-                    side.showShadows = showShadows
-                self.__resizeHandBoards()
-        return property(**locals())
+        if self.tileset != value:
+            assert ParallelAnimationGroup.current is None
+            self.__square.tileset = value
+            for side in self.__sides:
+                side.tileset = value
+            self.__resizeHandBoards()
+
+    @property
+    def showShadows(self):
+        """The current value"""
+        return self.__square.showShadows
+
+    @showShadows.setter
+    def showShadows(self, showShadows):
+        """setting this actually changes the visuals."""
+        if self.showShadows != showShadows:
+            assert ParallelAnimationGroup.current is None
+            self.__square.showShadows = showShadows
+            for side in self.__sides:
+                side.showShadows = showShadows
+            self.__resizeHandBoards()
 
     def __resizeHandBoards(self, dummyResults=None):
         """we are really calling _setRect() too often. But at least it works"""
         for player in self.game.players:
             player.handBoard.computeRect()
-        InternalParameters.field.adjustView()
+        Internal.field.adjustView()
 
     def __setDrawingOrder(self, dummyResults=None):
         """set drawing order of the wall"""
