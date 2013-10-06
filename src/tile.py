@@ -21,8 +21,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 from PyQt4.QtCore import Qt, QString, QRectF, QPointF, QSizeF, QSize, pyqtProperty, QObject
 from PyQt4.QtGui import QGraphicsItem, QPixmap, QPainter
 from PyQt4.QtGui import QColor
-from util import logException, isAlive, stack, logDebug
-from common import LIGHTSOURCES, ZValues, InternalParameters, Preferences, Debug
+from util import logException, stack, logDebug
+from common import LIGHTSOURCES, ZValues, InternalParameters, Preferences, Debug, isAlive
 
 def chiNext(element, offset):
     """the element name of the following value"""
@@ -231,6 +231,9 @@ class GraphicsTileItem(QGraphicsItem):
             self.tile.xoffset, self.x(), self.tile.yoffset,
             self.y(), self.zValue(), size.width(), size.height(), self.rotation(), scale, level)
 
+    def __repr__(self):
+        """default representation"""
+        return 'GraphicsTileItem(%s)' % str(self)
 
 class Tile(QObject):
     """a single tile on the board. This is a QObject because we want to animate it.
@@ -430,6 +433,10 @@ class Tile(QObject):
             return self.graphics.__str__()
         else:
             return '%s %.2d/%.2d' % (self.element, self.xoffset, self.yoffset)
+
+    def __repr__(self):
+        """default representation"""
+        return 'Tile(%s)' % str(self)
 
     def isFlower(self):
         """is this a flower tile?"""

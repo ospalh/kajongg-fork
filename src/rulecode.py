@@ -1,6 +1,7 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 ; mode: python -*-
 
 """Copyright (C) 2009-2012 Wolfgang Rohdewald <wolfgang@rohdewald.de>
+Copyright © 2013 Roland Sieker <ospalh@gmail.com>
 
 kajongg is free software you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -21,9 +22,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 Read the user manual for a description of the interface to this scoring engine
 """
 
+from collections import Counter
+
 from meld import Meld, CONCEALED, EXPOSED, CLAIMEDKONG, REST, elementKey
-from common import elements, IntDict
+from common import elements, IntDict, WINDS
 from message import Message
+from query import Query
 
 class Function(object):
     """Parent for all Function classes. We need to implement
@@ -34,6 +38,12 @@ class Function(object):
 
     def __init__(self):
         self.options = {}
+
+    def __str__(self):
+        return self.__class__.__name__
+
+    def __repr__(self):
+        return self.__class__.__name__
 
 # pylint: disable=C0111
 # the class and method names are mostly self explaining, we do not
@@ -117,18 +127,21 @@ class OwnWindPungKong(Function):
         return len(meld) >= 3 and meld.pairs[0].lower() == 'w' + hand.ownWind
 
 class OwnWindPair(Function):
-    @staticmethod
-    def appliesToMeld(hand, meld):
+    def appliesToMeld(self, hand, meld):
+        if 'not_7pairs' in self.options and SevenPairs.appliesToHand(hand):
+            return False
         return len(meld) == 2 and meld.pairs[0].lower() == 'w' + hand.ownWind
 
 class RoundWindPair(Function):
-    @staticmethod
-    def appliesToMeld(hand, meld):
+    def appliesToMeld(self, hand, meld):
+        if 'not_7pairs' in self.options and SevenPairs.appliesToHand(hand):
+            return False
         return len(meld) == 2 and meld.pairs[0].lower() == 'w' + hand.roundWind
 
 class DragonPair(Function):
-    @staticmethod
-    def appliesToMeld(dummyHand, meld):
+    def appliesToMeld(self, hand, meld):
+        if 'not_7pairs' in self.options and SevenPairs.appliesToHand(hand):
+            return False
         return len(meld) == 2 and meld.pairs[0][0].lower() == 'd'
 
 class LastTileCompletesPairMinor(Function):
@@ -137,6 +150,77 @@ class LastTileCompletesPairMinor(Function):
         return (hand.lastMeld and len(hand.lastMeld) == 2
             and hand.lastMeld.pairs[0][0] == hand.lastMeld.pairs[1][0]
             and hand.lastTile[1] in '2345678')
+
+
+class SingleWait(Function):
+    u"""
+    Single wait is waiting to finish the pair.
+
+    Single wait is waiting to finish the pair, but it is not counted
+    for Seven pairs.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        if not hand.lastMeld:
+            return
+        if SevenPairs.appliesToHand(hand):
+            return False
+        return hand.lastMeld and len(hand.lastMeld) == 2 \
+            and hand.lastMeld.pairs[0][0] == hand.lastMeld.pairs[1][0]
+
+
+class EdgeWait(Function):
+    u"""
+    Edge wait is waiting to finish a 123 chow on a 3 or a 789 chow on a 7.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        if not hand.lastMeld or not hand.lastMeld.isChow():
+            return False
+        lm_n = [pair[1] for pair in hand.lastMeld.pairs]
+        return (lm_n[2] == '3' and hand.lastTile[1] == '3') \
+            or (lm_n[0] == '7' and hand.lastTile[1] == '7')
+
+
+class ClosedWait(Function):
+    u"""Closed wait is waiting to finish on an 'inside straight'."""
+    @staticmethod
+    def appliesToHand(hand):
+        if not hand.lastMeld or not hand.lastMeld.isChow():
+            return False
+        return hand.lastMeld.pairs[1][1] == hand.lastTile[1]
+
+
+class Pinfu(Function):
+    u"""
+    Pinfu
+
+    Pinfu, that is, a hand with four chows and a valueless pair. This
+    is not used directly but by ConcealedPinfu and OpenPinfu. The
+    point of this is that ZeroPointHand might apply to some SevePairs
+    hands, or to Thirteen Orphans.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        return StandardMahJongg.appliesToHand(hand) \
+            and ZeroPointHand.appliesToHand(hand)
+
+
+class OpenPinfu(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        return Pinfu.appliesToHand(hand) \
+            and not MostlyConcealed.appliesToHand(hand)
+
+
+class SelfDraw(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        if not hand.lastSource or ConcealedPinfu.appliesToHand(hand) \
+                or SevenPairs.appliesToHand(hand):
+            return False
+        return not (hand.lastSource in 'dkZ')
+
 
 class Flower(Function):
     @staticmethod
@@ -165,15 +249,89 @@ class ZeroPointHand(Function):
     def appliesToHand(hand):
         return not any(x.meld for x in hand.usedRules if x.meld and len(x.meld) > 1)
 
+
+class ConcealedPinfu(Function):
+    u"""
+    Concealend pinfu.
+
+    Concealed all chows hand with a valueless pair.  You have to
+    finish on a two-sided chow wit, which is equivalent to not
+    allowing hands that get the points for waits.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        # Check if it is concealed pinfu
+        if not MostlyConcealed.appliesToHand(hand) \
+                or not Pinfu.appliesToHand(hand):
+            return False
+        # Check that the wait condition applies. Or rather, that the
+        # waiting conditions that give points do not apply.
+        return not (ClosedWait.appliesToHand(hand)
+                    or EdgeWait.appliesToHand(hand)
+                    or SingleWait.appliesToHand(hand))
+
+
 class NoChow(Function):
     @staticmethod
     def appliesToHand(hand):
         return not any(x.isChow() for x in hand.melds)
 
+class AllPungs(Function):
+    u"""
+    Two fan yaku "all pungs"
+
+    The all pungs yaku is different from no chow above. No chow
+    applies to seven pairs (correctly or not), this does not.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        pung_kong_count = 0
+        for meld in hand.melds:
+            if meld.isPung() or meld.isKong():
+                pung_kong_count += 1
+        return 4 == pung_kong_count
+
+
 class OnlyConcealedMelds(Function):
     @staticmethod
     def appliesToHand(hand):
         return not any((x.state == EXPOSED and x.meldType != CLAIMEDKONG) for x in hand.melds)
+
+
+class FullyConcealed(Function):
+    u"""
+    Fully concealed hand.
+
+    Fully concealed hand, Japanese style. Similar to
+    OnlyConcealedMelds, but claimed kongs make the hand open and
+    violate this.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        return not any(x.state == EXPOSED for x in hand.melds)
+
+
+class MostlyConcealed(Function):
+    u"""
+    A hand that counts as concealed for Japanese rules.
+
+    This is true if the hand is fully concealed or was untill the last
+    tile was called.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        exposed = [x for x in hand.melds if x.state == EXPOSED]
+        if not exposed:
+            return True
+        if len(exposed) > 1:
+            return False
+        # So here len(exposed() is 1.
+        if hand.lastSource and hand.lastSource in 'dkZ':
+            # Ron
+            return True
+        # Not ron, but an exposed meld
+        return False
+
 
 class FalseColorGame(Function):
     @staticmethod
@@ -181,10 +339,26 @@ class FalseColorGame(Function):
         dwSet = set('dw')
         return dwSet & hand.suits and len(hand.suits - dwSet) == 1
 
+
+class HalfFlushBonus(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        return MostlyConcealed.appliesToHand(hand) \
+            and FalseColorGame.appliesToHand(hand)
+
+
 class TrueColorGame(Function):
     @staticmethod
     def appliesToHand(hand):
         return len(hand.suits) == 1 and hand.suits < set('sbc')
+
+
+class FullFlushBonus(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        return MostlyConcealed.appliesToHand(hand) \
+            and TrueColorGame.appliesToHand(hand)
+
 
 class Purity(Function):
     @staticmethod
@@ -208,6 +382,57 @@ class OnlyHonors(Function):
     @staticmethod
     def appliesToHand(hand):
         return not set(hand.values) - set('grbeswn')
+
+
+class OutsideHand(Function):
+    u"""
+    Outside Hand
+
+    A hand where all sets, including the pair, contain terminals or
+    honours, and where at least one set is a chow.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+
+        def majorInMeld(meld):
+            return meld.pairs[0][1] in 'grbeswn19' \
+                or (meld.isChow() and meld.pairs[2][1] == '9')
+        melds = hand.melds
+        return any(meld.isChow() for meld in melds) \
+            and all(majorInMeld(meld) for meld in melds)
+
+
+class OutsideHandBonus(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        return MostlyConcealed.appliesToHand(hand) \
+            and OutsideHand.appliesToHand(hand)
+
+
+class TerminalsInAll(Function):
+    u"""
+    Terminals in All Sets
+
+    A hand where all sets, including the pair, contain terminals, and
+    where at least one set is a chow.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+
+        def terminalInMeld(meld):
+            return meld.pairs[0][1] in '19' \
+                or (meld.isChow() and meld.pairs[2][1] == '9')
+        melds = hand.melds
+        return any(meld.isChow() for meld in melds) \
+            and all(terminalInMeld(meld) for meld in melds)
+
+
+class TerminalsInAllBonus(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        return MostlyConcealed.appliesToHand(hand) \
+            and TerminalsInAll.appliesToHand(hand)
+
 
 class HiddenTreasure(Function):
     @staticmethod
@@ -573,6 +798,234 @@ class AllPairHonors(Function):
         return candidates
 
 
+class AllSimples(Function):
+    u"""
+    A hand that consists only of 2–8 tiles.
+
+    A hand that consists only of 2–8 tiles.  According to the EMA
+    rules, this must be concealed* in Europe, but not so in Japan.
+    """
+    def appliesToHand(self, hand):
+        # all_are_simples = all([x[1] in '2345678' for x in hand.values])
+        all_are_simples = not set(hand.values) - set('2345678')
+        if not all_are_simples:
+            return False
+        return ('may_be_open' in self.options) \
+            or MostlyConcealed.appliesToHand(hand)
+
+
+class PureDoubleChow(Function):
+    u"""
+    Concealed hand with two identical chows.
+
+    Concealed* hand with two identical chows, that is with the same
+    numbers in the same suite.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        if not MostlyConcealed.appliesToHand(hand):
+            return False
+        if TwicePureDoubleChow.appliesToHand(hand):
+            # From the rule for “Twice pure double chows”: No
+            # additional yaku for Pure Double Chow (IIPEIKOU) are
+            # counted.
+            return False
+        chow_start_tiles = [meld.pairs[0].lower() for meld in hand.melds
+                            if meld.isChow()]
+        try:
+            return Counter(
+                [cst for cst in chow_start_tiles]).most_common(1)[0][1] > 1
+        except (ValueError, IndexError):
+            # No chow, so none is most_common.
+            return False
+
+
+class TwicePureDoubleChow(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        if not MostlyConcealed.appliesToHand(hand):
+            return False
+        chow_start_tiles = [meld.pairs[0].lower() for meld in hand.melds
+                            if meld.isChow()]
+        try:
+            two_most_common = Counter(
+                [cst for cst in chow_start_tiles]).most_common(2)
+        except ValueError:
+            # No chow, so none is most_common.
+            return False
+        try:
+            return two_most_common[0][1] == 2 and two_most_common[1][1] == 2
+        except IndexError:
+            # No second chow
+            return False
+
+
+class TripleChow(Function):
+    u"""
+    Three chows with the same numbers, one in each suit.
+
+    Three chows with the same numbers, one in each suit. The code
+    assumes that there are at most four chows. To combine this with
+    16-tile game (https://bugs.kde.org/show_bug.cgi?id=254918), this
+    needs to be re-written.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        chow_start_tiles = [meld.pairs[0].lower() for meld in hand.melds
+                            if meld.isChow()]
+        try:
+            (most_common_chow, ) = Counter(
+                [cst[1] for cst in chow_start_tiles]).most_common(1)
+        except (ValueError, IndexError):
+            # No chow, so none is most_common.
+            return False
+        return 'b' + most_common_chow[0] in chow_start_tiles \
+            and 'c' + most_common_chow[0] in chow_start_tiles \
+            and 's' + most_common_chow[0] in chow_start_tiles
+
+
+class TripleChowBonus(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        return MostlyConcealed.appliesToHand(hand) \
+            and TripleChow.appliesToHand(hand)
+
+
+class TriplePung(Function):
+    u"""
+    Three pungs with the same numbers, one in each suit.
+
+    Three pungs with the same numbers, one in each suit. See
+    limitation for Triple Chow above.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        pung_start_tiles = [meld.pairs[0].lower() for meld in hand.melds
+                            if meld.isPungOrKong()]
+        try:
+            (most_common_pung, ) = Counter(
+                [cst[1] for cst in pung_start_tiles]).most_common(1)
+        except (ValueError, IndexError):
+            # No pung, so none is most_common.
+            return False
+        return 'b' + most_common_pung[0] in pung_start_tiles \
+            and 'c' + most_common_pung[0] in pung_start_tiles \
+            and 's' + most_common_pung[0] in pung_start_tiles
+
+
+class PureStraight(Function):
+    u"""
+    Pure straight
+
+    A pure straight, that is, a hand with three consecutive chows in
+    the same suit.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        # The code is basically the same as for triple chow, only we
+        # first check the most common suite, and then check that we
+        # have the right numbers in that suite.
+        chow_start_tiles = [meld.pairs[0].lower() for meld in hand.melds
+                            if meld.isChow()]
+        try:
+            (most_common_chow, ) = Counter(
+                [cst[0] for cst in chow_start_tiles]).most_common(1)
+        except (ValueError, IndexError):
+            # No chow, so none is most_common.
+            return False
+        return most_common_chow[0] + '1' in chow_start_tiles \
+            and most_common_chow[0] + '4' in chow_start_tiles \
+            and most_common_chow[0] + '7' in chow_start_tiles
+
+
+class PureStraightBonus(Function):
+    @staticmethod
+    def appliesToHand(hand):
+        return MostlyConcealed.appliesToHand(hand) \
+            and PureStraight.appliesToHand(hand)
+
+
+class SevenPairs(Function):
+    u"""
+    The mahjong hand seven pairs.
+
+    Class to define the winnig hand seven pairs. Differences to
+    AllPairHonors: 2–8 tiles are allowed, kongs (seen as two
+    pairs) are not and it also must be concealed*.
+    """
+
+    @staticmethod
+    def computeLastMelds(hand):
+        return [Meld([hand.lastTile, hand.lastTile])]
+
+    @staticmethod
+    def claimness(hand, dummyDiscard):
+        result = IntDict()
+        if SevenPairs.shouldTry(hand):
+            result[Message.Pung] = -999
+            result[Message.Kong] = -999
+            result[Message.Chow] = -999
+        return result
+
+    @staticmethod
+    def maybeCallingOrWon(hand):
+        return len(hand.declaredMelds) < 2
+
+    @staticmethod
+    def appliesToHand(hand):
+        if not MostlyConcealed.appliesToHand(hand):
+            return False
+        # We actually just test for “all pairs”. It will not work when
+        # playing with bonus tiles. I guess those could be excluded
+        # when constructing the Counter.
+        return all(itm[1] == 2 for itm in Counter(
+                tile.lower() for tile in hand.tileNames).items())
+
+    def winningTileCandidates(self, hand):
+        if not self.maybeCallingOrWon(hand):
+            return set()
+        single = list(
+            x for x in hand.tileNames if hand.tileNames.count(x) == 1)
+        if len(single) != 1:
+            return set()
+        return set(single)
+
+    @staticmethod
+    def shouldTry(hand, maxMissing=4):
+        if hand.declaredMelds:
+            return False
+        melds = hand.melds
+        pair_count = 0
+        for meld in melds:
+            if meld.isPair():
+                pair_count += 1
+        result = (pair_count >= (7 - maxMissing / 2))
+        return result
+
+    @staticmethod
+    def rearrange(dummyHand, pairs):
+        melds = []
+        for pair in set(pairs):
+            while pairs.count(pair) >= 2:
+                melds.append(Meld(pair * 2))
+                pairs.remove(pair)
+                pairs.remove(pair)
+        return melds, pairs
+
+    @staticmethod
+    def weigh(dummyAiInstance, candidates):
+        hand = candidates.hand
+        if not SevenPairs.shouldTry(hand):
+            return candidates
+        keep = 10
+        for candidate in candidates:
+            if candidate.occurrence == 3:
+                candidate.keep -= keep / 2
+            else:
+                candidate.keep += keep
+        return candidates
+
+
 class FourfoldPlenty(Function):
     @staticmethod
     def appliesToHand(hand):
@@ -678,6 +1131,44 @@ class ScratchingPole(Function):
     def appliesToHand(hand):
         return RobbingKong.appliesToHand(hand) and hand.lastTile == 'b2'
 
+class StandardRotation(Function):
+    @staticmethod
+    def rotate(game):
+        return game.winner and game.winner.wind != 'E'
+
+class JapaneseRotation(Function):
+    @staticmethod
+    def rotate(game):
+        return game.winner and game.winner.wind != 'E'
+
+class EastWonNineTimesInARow(Function):
+    nineTimes = 9
+    @staticmethod
+    def appliesToHand(hand):
+        if not hand.player:
+            return False
+        game = hand.player.game
+        return EastWonNineTimesInARow.appliesToGame(game)
+    @staticmethod
+    def appliesToGame(game, needWins=None):
+        if needWins is None:
+            needWins = EastWonNineTimesInARow.nineTimes
+            if game.isScoringGame():
+                # we are only proposing for the last needed Win
+                needWins  -= 1
+        if game.winner and game.winner.wind == 'E' and game.notRotated >= needWins:
+            prevailing = WINDS[game.roundsFinished % 4]
+            eastMJCount = int(Query("select count(1) from score "
+                "where game=%d and won=1 and wind='E' and player=%d "
+                "and prevailing='%s'" % \
+                (game.gameid, game.players['E'].nameid, prevailing)).records[0][0])
+            return eastMJCount == needWins
+        return False
+    @staticmethod
+    def rotate(game):
+        return EastWonNineTimesInARow.appliesToGame(game, needWins = EastWonNineTimesInARow.nineTimes)
+
+
 class StandardMahJongg(Function):
     @staticmethod
     def computeLastMelds(hand):
@@ -732,13 +1223,15 @@ class StandardMahJongg(Function):
         if len(hand.melds) > 7:
             # hope 7 is sufficient, 6 was not
             return set()
-        inHand = list(x.lower() for x in hand.inHand)
-        if not hand.inHand:
+        if not hand.tileNamesInHand:
             return set()
+        inHand = list(x.lower() for x in hand.tileNamesInHand)
         result = inHand[:]
         pairs = 0
         isolated = 0
         maxChows = hand.ruleset.maxChows - sum(x.isChow() for x in hand.declaredMelds)
+        # TODO: does not differentiate between maxChows == 1 and maxChows > 1
+        # test with kajonggtest and a ruleset where maxChows == 2
         if maxChows < 0:
             return set()
         if maxChows == 0:
@@ -809,11 +1302,11 @@ class StandardMahJongg(Function):
             valueSet = set(values)
             if len(values) == 4 and len(values) == len(valueSet):
                 if values[0] + 3 == values[-1]:
-                    # print('seq4 in %s' % hand.inHand)
+                    # print('seq4 in %s' % hand.tileNamesInHand)
                     return set([color + str(values[0]), color + str(values[-1])])
             if len(values) == 7 and len(values) == len(valueSet):
                 if values[0] + 6 == values[6]:
-                    # print('seq7 in %s' % hand.inHand)
+                    # print('seq7 in %s' % hand.tileNamesInHand)
                     return set([color + str(values[0]), color + str(values[3]), color + str(values[6])])
             if len(values) == 1:
                 # only a pair of this value is possible
@@ -882,6 +1375,27 @@ class StandardMahJongg(Function):
                 bestVariant = variantMelds
         return bestVariant, []
 
+
+class StandardConcealedRon(StandardMahJongg):
+    u"""
+    Standard mahjong on a discard.
+
+    This is one of the two standard mahjongs used with Japanese rules.
+    """
+    @staticmethod
+    def computeLastMelds(hand):
+        return StandardMahJongg.computeLastMelds(hand)
+
+    @staticmethod
+    def appliesToHand(hand):
+        u"""Check if it is a standard mahjongg and self-drawn."""
+        if not StandardMahJongg.appliesToHand(hand):
+            return False
+        if not hand.lastSource or not hand.lastSource in 'dkZ':
+            return False  # self-drawn
+        return MostlyConcealed.appliesToHand(hand)
+
+
 class GatesOfHeaven(Function):
     def __init__(self):
         Function.__init__(self)
@@ -891,6 +1405,12 @@ class GatesOfHeaven(Function):
         if len(suits) != 1 or not suits < set('sbc'):
             return False
         self.suit = suits.pop()
+        # I don’t actually see how these rules make sure the hand is
+        # mostly cocealed. Looks like claiming a few chows should
+        # return True here. Make sure it works correctly for Riichi.
+        if 'Japanese' in self.options \
+                and not MostlyConcealed.appliesToHand(hand):
+            return False
         for meld in hand.declaredMelds:
             if meld.isPung():
                 return False
@@ -942,7 +1462,7 @@ class ThirteenOrphans(Function):
 
     @staticmethod
     def computeLastMelds(hand):
-        meldSize = hand.inHand.count(hand.lastTile)
+        meldSize = hand.tileNamesInHand.count(hand.lastTile)
         return [Meld([hand.lastTile] * meldSize)]
 
     @staticmethod
@@ -1068,6 +1588,43 @@ class ThreeConcealedPongs(Function):
         return len([x for x in hand.melds if (
             x.state == CONCEALED or x.meldType == CLAIMEDKONG) and (x.isPung() or x.isKong())]) >= 3
 
+
+class ThreeConcealedPungsOrKongs(Function):
+    u"""
+    Three concealend pungs or kongs.
+
+    A hand with three concealend pungs or kongs. The difference to
+    ThreeConcealedPongs is that for this claimed kongs (i.e. kongs
+    that started out as hidden pungs) do not count. Also, we have an
+    extra yakuman hand for four concealed pungs or kongs.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        return len(
+            [x for x in hand.melds
+             if x.state == CONCEALED and x.isPungOrKong()]) == 3
+
+
+class FourConcealedPungsOrKongs(Function):
+    u"""
+    Four concealend pungs or kongs.
+
+    A hand with four concealend pungs or kongs. The difference to
+    ThreeConcealedPongs is that for this claimed kongs (i.e. kongs
+    that started out as hidden pungs) do not count. And of course that
+    it has to be four.
+    """
+    @staticmethod
+    def appliesToHand(hand):
+        # “Winning on a discard is allowed only in case of single wait
+        # on the pair.” is a tautology. Even if the hand is
+        # concealed*, winnig on the discard would make the fourth pung
+        # open, even if not the hand.
+        return len(
+            [x for x in hand.melds
+             if x.state == CONCEALED and x.isPungOrKong()]) == 4
+
+
 class MahJonggWithOriginalCall(Function):
     @staticmethod
     def appliesToHand(hand):
@@ -1106,8 +1663,19 @@ class BlessingOfHeaven(Function):
             and not (set(hand.announcements) - set('a')))
 
 class BlessingOfEarth(Function):
-    @staticmethod
-    def appliesToHand(hand):
+    def appliesToHand(self, hand):
+        try:
+            game = self.player.game
+        except AttributeError:
+            game = None
+        if 'no_claim' in self.options and game \
+                and not game.double_riichi_chance:
+            # The “double_riichi_chance” condition is the same as for
+            # blessing of earth or blessing of man, (first
+            # *uninterrupted* turn) but
+            # chance_for_double_riichi_or_blessing_of_earth_or_man is
+            # too long for a variable name.
+            return False
         return hand.ownWind != 'e' and hand.lastSource == '1'
 
     @staticmethod

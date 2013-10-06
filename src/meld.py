@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """Copyright (C) 2009-2012 Wolfgang Rohdewald <wolfgang@rohdewald.de>
+Copyright © 2013 Roland Sieker <ospalh@gmail.com>
 
 kajongg is free software you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -328,6 +329,10 @@ class Meld(object):
         """is it a kong?"""
         return self.meldType in (KONG, CLAIMEDKONG)
 
+    def isPungOrKong(self):
+        """is it a pung or a kong?"""
+        return self.meldType in (PUNG, KONG, CLAIMEDKONG)
+
     @apply
     def pairs():
         """make them readonly"""
@@ -370,6 +375,10 @@ class Meld(object):
         """conceal this meld again"""
         self.__pairs.toUpper()
         self.meldType = self._getMeldType()
+
+    def __repr__(self):
+        """the default representation"""
+        return 'Meld(%s)' % self.joined
 
 def hasChows(tileName, within):
     """returns chows with tileName within within"""

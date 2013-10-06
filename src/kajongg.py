@@ -23,11 +23,13 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 import signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 import sys
+
+from PyQt4.QtCore import QObject, QEvent, Qt
 from about import About
 from kde import ki18n, KApplication, KCmdLineArgs, KCmdLineOptions
 
-from util import m18n
 from common import InternalParameters, Debug
+from util import logDebug
 
 # do not import modules using twisted before our reactor is running
 # do not import util directly or indirectly before InternalParameters.app
@@ -41,14 +43,13 @@ def main(myReactor):
     the old "not destroying KApplication last"
     make a real main(), and make app global. app will then be the last thing deleted (C++)
     """
-    from query import Query, initDb
-    Query.dbhandle = initDb()
-    if not Query.dbhandle:
+    from query import initDb
+    if not initDb():
         return 1
     InternalParameters.reactor = myReactor
     from predefined import loadPredefinedRulesets
     loadPredefinedRulesets()
-    if InternalParameters.showRulesets or InternalParameters.autoPlayRulesetName:
+    if InternalParameters.showRulesets or InternalParameters.rulesetName:
         from rule import Ruleset
         from util import kprint
         rulesets = Ruleset.selectableRulesets()
@@ -58,13 +59,13 @@ def main(myReactor):
             return
         else:
             for ruleset in rulesets:
-                if ruleset.name == InternalParameters.autoPlayRulesetName:
-                    InternalParameters.autoPlayRuleset = ruleset
+                if ruleset.name == InternalParameters.rulesetName:
+                    InternalParameters.ruleset = ruleset
                     break
             else:
-                kprint('Ruleset %s is unknown' % InternalParameters.autoPlayRulesetName)
+                kprint('Ruleset %s is unknown' % InternalParameters.rulesetName)
                 return 1
-    if InternalParameters.hasGUI:
+    if InternalParameters.gui:
         from playfield import PlayField
         PlayField().show()
     else:
@@ -76,7 +77,9 @@ def defineOptions():
     """this is the KDE way. Compare with kajonggserver.py"""
     options = KCmdLineOptions()
     options.add("playopen", ki18n("all robots play with visible concealed tiles"))
-    options.add("autoplay <ruleset>", ki18n("play like a robot using ruleset"))
+    options.add("demo", ki18n("start with demo mode"))
+    options.add("ruleset <ruleset>", ki18n("use ruleset without asking"))
+    options.add("player <PLAYER>", ki18n("prefer PLAYER for next login"))
     options.add("ai <AI>", ki18n("use AI variant for human player in demo mode"))
     options.add("csv <CSV>", ki18n("write statistics to CSV"))
     options.add("rulesets", ki18n("show all available rulesets"))
@@ -92,8 +95,10 @@ def parseOptions():
     InternalParameters.app = APP
     InternalParameters.playOpen |= args.isSet('playopen')
     InternalParameters.showRulesets|= args.isSet('rulesets')
-    InternalParameters.autoPlay |= args.isSet('autoplay')
-    InternalParameters.autoPlayRulesetName = str(args.getOption('autoplay'))
+    InternalParameters.demo |= args.isSet('demo')
+    InternalParameters.rulesetName = str(args.getOption('ruleset'))
+    if args.isSet('player'):
+        InternalParameters.player = str(args.getOption('player'))
     if args.isSet('ai'):
         InternalParameters.AI = str(args.getOption('ai'))
     if args.isSet('csv'):
@@ -101,14 +106,38 @@ def parseOptions():
     if args.isSet('socket'):
         InternalParameters.socket = str(args.getOption('socket'))
     InternalParameters.game = str(args.getOption('game'))
-    InternalParameters.hasGUI |= args.isSet('gui')
-    if not InternalParameters.hasGUI and '/' in InternalParameters.game:
-        print m18n('You cannot specify hand/discard with --game when starting with --nogui')
-        sys.exit(2)
+    InternalParameters.gui |= args.isSet('gui')
+    InternalParameters.demo |= not InternalParameters.gui
     msg = Debug.setOptions(str(args.getOption('debug')))
     if msg:
         print msg
         sys.exit(2)
+
+class EvHandler(QObject):
+    """an application wide event handler"""
+    events = {y:x for x, y in QEvent.__dict__.items() if isinstance(y, int)}
+    keys = {y:x for x, y in Qt.__dict__.items() if isinstance(y, int)}
+    def eventFilter(self, receiver, event):
+        """will be called for all events"""
+        if event.type() in self.events:
+            # ignore unknown event types
+            name = self.events[event.type()]
+            if 'all' in Debug.events or name in Debug.events:
+                if hasattr(event, 'key'):
+                    value = self.keys[event.key()]
+                elif hasattr(event, 'text'):
+                    value = str(event.text())
+                else:
+                    value = ''
+                if value:
+                    value = '(%s)' % value
+                msg = '%s%s->%s' % (name, value, receiver)
+                if hasattr(receiver, 'text'):
+                    msg += '(%s)' % receiver.text()
+                elif hasattr(receiver, 'objectName'):
+                    msg += '(%s)' % receiver.objectName()
+                logDebug(msg)
+        return QObject.eventFilter(self, receiver, event)
 
 if __name__ == "__main__":
     from util import initLog
@@ -121,6 +150,10 @@ if __name__ == "__main__":
             # KApplication() says
             # QWidget: Cannot create a QWidget when no GUI is being used
     parseOptions()
+    if Debug.events:
+        EVHANDLER = EvHandler()
+        APP.installEventFilter(EVHANDLER)
+
     from config import SetupPreferences
     SetupPreferences()
     import qt4reactor

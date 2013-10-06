@@ -27,6 +27,17 @@ from game import Wall
 from animation import animate, afterCurrentAnimationDo, Animated, \
     ParallelAnimationGroup
 
+def fill_order(game):
+    try:
+        offset = 'ESWN'.find(game.myself.wind)
+    except Exception as e:
+        offset = 0
+    order = [0, 3, 2, 1, 0, 3, 2]
+    for i in range(4):
+        # print('filling board {}'.format(order[i + offset]))
+        yield order[i + offset]
+
+
 class UIWallSide(Board):
     """a Board representing a wall of tiles"""
     def __init__(self, tileset, boardRotation, length):
@@ -52,7 +63,11 @@ class UIWallSide(Board):
         return result
 
 class UIWall(Wall):
-    """represents the wall with four sides. self.wall[] indexes them counter clockwise, 0..3. 0 is bottom."""
+    """
+    Representation of the wall with four sides.
+
+    Representation of the wall with four sides. self.wall[] indexes
+    them counter clockwise, 0..3. 0 is bottom. N.B. """
     def __init__(self, game):
         """init and position the wall"""
         # we use only white dragons for building the wall. We could actually
@@ -145,9 +160,17 @@ class UIWall(Wall):
 
     def __placeWallTiles(self, dummyResult=None):
         """place all wall tiles"""
+
         tileIter = iter(self.tiles)
         tilesPerSide = len(self.tiles) // 4
-        for side in (self.__sides[0], self.__sides[3], self.__sides[2], self.__sides[1]):
+        # for side in (self.__sides[0], self.__sides[3],
+        #              self.__sides[2], self.__sides[1]):
+
+        # Make sure the tiles are aranged so that the break starts
+        # with respect to the east wind, not the bottom (human
+        # player).
+        for side_index in fill_order(self.game):
+            side = self.__sides[side_index]
             upper = True # upper tile is played first
             for position in range(tilesPerSide-1, -1, -1):
                 tile = tileIter.next()

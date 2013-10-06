@@ -55,6 +55,7 @@ class ServerMessage(Message):
     """those classes are used for messages from server to client"""
     # if sendScore is True, this message will send info about player scoring, so the clients can compare
     sendScore = False
+    needsGame = True   # message only applies to an existing game
 
     def clientAction(self, dummyClient, move):
         """default client action: none - this is a virtual class"""
@@ -134,7 +135,7 @@ class PungChowMessage(NotifyAtOnceMessage):
         return '<br><br>'.join(txt), warn, ''
 
 class MessagePung(PungChowMessage, ServerMessage):
-    """somebody said pung"""
+    """somebody said pung and gets the tile"""
     def __init__(self):
         PungChowMessage.__init__(self,
             name=m18ncE('kajongg','Pung'),
@@ -147,7 +148,7 @@ class MessagePung(PungChowMessage, ServerMessage):
         return client.claimed(move)
 
 class MessageKong(NotifyAtOnceMessage, ServerMessage):
-    """somebody said kong"""
+    """somebody said kong and gets the tile"""
     def __init__(self):
         NotifyAtOnceMessage.__init__(self,
             name=m18ncE('kajongg','Kong'),
@@ -182,7 +183,7 @@ class MessageKong(NotifyAtOnceMessage, ServerMessage):
             return client.declared(move)
 
 class MessageChow(PungChowMessage, ServerMessage):
-    """somebody said chow"""
+    """somebody said chow and gets the tile"""
     def __init__(self):
         PungChowMessage.__init__(self,
             name=m18ncE('kajongg','Chow'),
@@ -206,7 +207,7 @@ class MessageBonus(ClientMessage):
             table.pickTile()
 
 class MessageMahJongg(NotifyAtOnceMessage, ServerMessage):
-    """somebody sayd mah jongg"""
+    """somebody sayd mah jongg and wins"""
     sendScore = True
     def __init__(self):
         NotifyAtOnceMessage.__init__(self,
@@ -294,6 +295,7 @@ class MessageDiscard(ClientMessage, ServerMessage):
 class MessageProposeGameId(ServerMessage):
     """the game server proposes a new game id. We check if it is available
     in our local data base - we want to use the same gameid everywhere"""
+    needsGame = False
     def clientAction(self, client, move):
         """ask the client"""
         # move.source are the players in seating order
@@ -302,6 +304,7 @@ class MessageProposeGameId(ServerMessage):
 
 class MessageReadyForGameStart(ServerMessage):
     """the game server asks us if we are ready for game start"""
+    needsGame = False
     def clientAction(self, client, move):
         """ask the client"""
         def hideTableList(dummy):
@@ -526,6 +529,7 @@ class MessageDraw(ServerMessage):
 
 class MessageError(ServerMessage):
     """a client errors"""
+    needsGame = False
     def clientAction(self, dummyClient, move):
         """show the error message from server"""
         return logWarning(move.source)
@@ -544,10 +548,10 @@ class MessageOK(ClientMessage):
         """returns text and warning flag for button and text for tile for button and text for tile"""
         return m18n('Confirm that you saw the message'), False, ''
 
-class MessageNoClaim(ClientMessage):
-    """A player does not claim"""
+class MessageNoClaim(NotifyAtOnceMessage, ServerMessage):
+    """A player explicitly says he will not claim a tile"""
     def __init__(self):
-        ClientMessage.__init__(self,
+        NotifyAtOnceMessage.__init__(self,
             name=m18ncE('kajongg','No Claim'),
             shortcut=m18ncE('kajongg game dialog:Key for No claim', 'N'))
     def toolTip(self, dummyButton, dummyTile):
@@ -566,6 +570,23 @@ def __scanSelf():
                     if glob.__name__.startswith('Message'):
                         msg = glob()
                         type.__setattr__(Message, msg.name.replace(' ', ''), msg)
+
+class MessageTurnInterrupted(ServerMessage):
+    u"""
+    Turn interrupted message.
+
+    Turn interrupted message. A message that is send every time a tile
+    is claimed successfully, That is, a chow or pung is revealed or a
+    kong is show and not robbed.
+    """
+    def clientAction(self, client, move):
+        """
+        Clients nix extra yaku chances.
+
+        Clients should note that double richi, blessing of NN and
+        ippatsu chances are over.
+        """
+        return client.game.nixChances()
 
 class ChatMessage:
     """holds relevant info about a chat message"""

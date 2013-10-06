@@ -20,11 +20,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 import sys
 import os
-from util import logError, m18n, m18nc, isAlive, logWarning
-from common import WINDS, LIGHTSOURCES, InternalParameters, Preferences
+from util import logError, m18n, m18nc, logWarning
+from common import WINDS, LIGHTSOURCES, InternalParameters, Preferences, isAlive
 import cgitb, tempfile, webbrowser
 from twisted.internet.defer import succeed, fail
-from twisted.python.failure import Failure
 
 class MyHook(cgitb.Hook):
     """override the standard cgitb hook: invoke the browser"""
@@ -83,7 +82,7 @@ try:
     from uiwall import UIWall
     from animation import animate, afterCurrentAnimationDo, Animated
     from player import Player, Players
-    from game import Game, ScoringGame
+    from game import ScoringGame
     from chat import ChatWindow
 
 except ImportError, importError:
@@ -150,16 +149,13 @@ class ConfigDialog(KConfigDialog):
     """configuration dialog with several pages"""
     def __init__(self, parent, name):
         super(ConfigDialog, self).__init__(parent, QString(name), Preferences)
-        self.rulesetSelector = RulesetSelector(self)
-        self.pages = []
-        self.pages.append(self.addPage(PlayConfigTab(self),
-                m18nc('kajongg','Play'), "arrow-right"))
-        self.pages.append(self.addPage(TilesetSelector(self),
-                m18n("Tiles"), "games-config-tiles"))
-        self.pages.append(self.addPage(BackgroundSelector(self),
-                m18n("Backgrounds"), "games-config-background"))
-        self.pages.append(self.addPage(self.rulesetSelector,
-                m18n("Rulesets"), "games-kajongg-law"))
+        self.pages = [
+            self.addPage(PlayConfigTab(self),
+                m18nc('kajongg','Play'), "arrow-right"),
+            self.addPage(TilesetSelector(self),
+                m18n("Tiles"), "games-config-tiles"),
+            self.addPage(BackgroundSelector(self),
+                m18n("Backgrounds"), "games-config-background")]
         StateSaver(self)
 
     def keyPressEvent(self, event):
@@ -170,28 +166,6 @@ class ConfigDialog(KConfigDialog):
             self.setCurrentPage(self.pages[int(key)-1])
             return
         KConfigDialog.keyPressEvent(self, event)
-
-    def showEvent(self, dummyEvent):
-        """start transaction"""
-        self.rulesetSelector.refresh()
-        Query.dbhandle.transaction()
-
-    def accept(self):
-        """commit transaction"""
-        Query.dbhandle.commit() # commit renames and deletes of rulesets
-        if self.rulesetSelector.save():
-            KConfigDialog.accept(self)
-            return
-        Sorry(m18n('Cannot save your ruleset changes.<br>' \
-            'You probably introduced a duplicate name. <br><br >Message from database:<br><br>' \
-           '<message>%1</message>', Query.dbhandle.lastError().text()))
-
-    def reject(self):
-        """rollback transaction"""
-        self.rulesetSelector.cancel()
-        Query.dbhandle.rollback()
-        KConfigDialog.reject(self)
-
 
 class SwapDialog(QMessageBox):
     """ask the user if two players should change seats"""
@@ -398,20 +372,19 @@ class VisiblePlayer(Player):
         if not self.handBoard:
             return None
         string = ' '.join([self.scoringString(), self.__mjstring(singleRule, asWinner), self.__lastString(asWinner)])
-        if game.eastMJCount == 8 and self == game.winner and self.wind == 'E':
-            cRules = [game.ruleset.findRule('XEAST9X')]
-        else:
-            cRules = []
         if singleRule:
-            cRules.append(singleRule)
-        return Hand.cached(self, string, computedRules=cRules)
+            # singleRule may be None or note. When it is not None,
+            # Hand.cached will iterate over it. Make that work.
+            singleRule = [singleRule, ]
+        return Hand.cached(self, string, computedRules=singleRule)
 
     def popupMsg(self, msg):
         """shows a yellow message from player"""
-        self.speak(msg.lower())
-        yellow = self.front.message
-        yellow.setText('  '.join([unicode(yellow.msg), m18nc('kajongg', msg)]))
-        yellow.setVisible(True)
+        if msg != 'No Claim':
+            self.speak(msg.lower())
+            yellow = self.front.message
+            yellow.setText('  '.join([unicode(yellow.msg), m18nc('kajongg', msg)]))
+            yellow.setVisible(True)
 
     def hidePopup(self):
         """hide the yellow message from player"""
@@ -441,6 +414,7 @@ class PlayField(KXmlGuiWindow):
         self.clientDialog = None
 
         self.playerWindow = None
+        self.rulesetWindow = None
         self.scoreTable = None
         self.explainView = None
         self.scoringDialog = None
@@ -528,6 +502,7 @@ class PlayField(KXmlGuiWindow):
         QGraphicsView.drawBackground always wants a pixmap
         for a huge rect like 4000x3000 where my screen only has
         1920x1200"""
+        # pylint: disable=R0915
         self.setObjectName("MainWindow")
         centralWidget = QWidget()
         scene = MJScene()
@@ -559,6 +534,7 @@ class PlayField(KXmlGuiWindow):
         self.actionAbortGame.setEnabled(False)
         self.actionQuit = self.__kajonggAction("quit", "application-exit", self.quit, Qt.Key_Q)
         self.actionPlayers = self.__kajonggAction("players", "im-user", self.slotPlayers)
+        self.actionRulesets = self.__kajonggAction("rulesets", "games-kajongg-law", self.slotRulesets)
         self.actionChat = self.__kajonggToggleAction("chat", "call-start",
             shortcut=Qt.Key_H, actionData=ChatWindow)
         game = self.game
@@ -582,7 +558,7 @@ class PlayField(KXmlGuiWindow):
         self.actionAutoPlay = self.__kajonggAction("demoMode", "arrow-right-double", None, Qt.Key_D)
         self.actionAutoPlay.setCheckable(True)
         self.actionAutoPlay.toggled.connect(self.__toggleDemoMode)
-        self.actionAutoPlay.setChecked(InternalParameters.autoPlay)
+        self.actionAutoPlay.setChecked(InternalParameters.demo)
         QMetaObject.connectSlotsByName(self)
 
     def showWall(self):
@@ -603,10 +579,9 @@ class PlayField(KXmlGuiWindow):
 
     def abortAction(self):
         """abort current game"""
-        try:
-            self.abort()
-        except Failure:
-            pass
+        def doNotQuit(dummy):
+            """ignore failure to abort"""
+        self.abort().addErrback(doNotQuit)
 
     def abort(self):
         """abort current game"""
@@ -616,7 +591,7 @@ class PlayField(KXmlGuiWindow):
                 return self.abortGame()
             else:
                 self.actionAutoPlay.setChecked(demoMode)
-                return fail(None) # just continue
+                return fail(Exception('no abort'))
         if not self.game:
             self.startingGame = False
             return succeed(None)
@@ -625,7 +600,7 @@ class PlayField(KXmlGuiWindow):
         if self.game.finished():
             return self.abortGame()
         else:
-            return QuestionYesNo(m18n("Do you really want to abort this game?"), gotAnswer)
+            return QuestionYesNo(m18n("Do you really want to abort this game?"), always=True).addCallback(gotAnswer)
 
     def quit(self):
         """exit the application"""
@@ -742,6 +717,9 @@ class PlayField(KXmlGuiWindow):
         self.actionPlayers.setText(m18nc('@action:intoolbar', "&Players"))
         self.actionPlayers.setHelpText(m18nc('kajongg @info:tooltip', 'define your players.'))
 
+        self.actionRulesets.setText(m18nc('@action:intoolbar', "&Rulesets"))
+        self.actionRulesets.setHelpText(m18nc('kajongg @info:tooltip', 'customize rulesets.'))
+
         self.actionAngle.setText(m18nc('@action:inmenu', "&Change Visual Angle"))
         self.actionAngle.setIconText(m18nc('@action:intoolbar', "Angle"))
         self.actionAngle.setHelpText(m18nc('kajongg @info:tooltip', "Change the visual appearance of the tiles."))
@@ -781,6 +759,12 @@ class PlayField(KXmlGuiWindow):
             self.playerWindow = PlayerList(self)
         self.playerWindow.show()
 
+    def slotRulesets(self):
+        """show the player list"""
+        if not self.rulesetWindow:
+            self.rulesetWindow = RulesetSelector()
+        self.rulesetWindow.show()
+
     def selectScoringGame(self):
         """show all games, select an existing game or create a new game"""
         Players.load()
@@ -791,11 +775,11 @@ class PlayField(KXmlGuiWindow):
         if gameSelector.exec_():
             selected = gameSelector.selectedGame
             if selected is not None:
-                Game.loadFromDB(selected, what=ScoringGame)
+                ScoringGame.loadFromDB(selected)
             else:
                 self.newGame()
             if self.game:
-                self.game.throwDices()
+                self.game.throwDice()
         gameSelector.close()
         self.updateGUI()
         return bool(self.game)
@@ -968,7 +952,7 @@ class PlayField(KXmlGuiWindow):
                 self.clientDialog.proposeAction() # an illegal action might have focus
                 self.clientDialog.selectButton() # select default, abort timeout
         else:
-            InternalParameters.autoPlay = checked
+            InternalParameters.demo = checked
             if checked:
                 # TODO: use the last used ruleset. Right now it always takes the first of the list.
                 self.playGame()
@@ -990,6 +974,7 @@ class PlayField(KXmlGuiWindow):
         self.game.maybeRotateWinds()
         self.game.prepareHand()
         self.game.initHand()
+        self.scoringDialog.clearLastTileCombo()
 
     def prepareHand(self):
         """redecorate wall"""

@@ -89,11 +89,8 @@ class TablesModel(QAbstractTableModel):
                 result = QVariant(int(Qt.AlignLeft|Qt.AlignVCenter))
         if index.isValid() and (0 <= index.row() < len(self.tables)):
             table = self.tables[index.row()]
-            if role == Qt.DisplayRole and index.column() == 1:
+            if role == Qt.DisplayRole and index.column() in (0, 1):
                 result = QVariant(table.tableid)
-            elif role == Qt.DisplayRole and index.column() == 0:
-                if not table.status.startswith('Suspended'):
-                    result = QVariant(table.tableid)
             elif role == Qt.DisplayRole and index.column() == 2:
                 players = []
                 zipped = zip(table.playerNames, table.playersOnline)
@@ -112,9 +109,9 @@ class TablesModel(QAbstractTableModel):
                 names = ''.join(players)
                 result = QVariant(names)
             elif role == Qt.DisplayRole and index.column() == 3:
-                status = table.status
-                if status.startswith('Suspended'):
-                    dateVal = ' ' + datetime.datetime.strptime(status.replace('Suspended', ''),
+                status = table.status()
+                if table.suspendedAt:
+                    dateVal = ' ' + datetime.datetime.strptime(table.suspendedAt,
                         '%Y-%m-%dT%H:%M:%S').strftime('%c').decode('utf-8')
                     status = 'Suspended'
                 else:
@@ -122,7 +119,7 @@ class TablesModel(QAbstractTableModel):
                 result = QVariant(m18nc('table status', status) + dateVal)
             elif index.column() == 4:
                 if role == Qt.DisplayRole:
-                    result = QVariant(m18n(table.ruleset.name))
+                    result = QVariant(m18n((table.myRuleset if table.myRuleset else table.ruleset).name))
                 elif role == Qt.ForegroundRole:
                     palette = KApplication.palette()
                     color = palette.windowText() if table.myRuleset else 'red'
@@ -229,7 +226,7 @@ class TableList(QWidget):
 
     def show(self):
         """prepare the view and show it"""
-        assert not InternalParameters.autoPlay
+        assert not InternalParameters.demo
         if self.client.hasLocalServer():
             title = m18n('Local Games with Ruleset %1', self.client.ruleset.name)
         else:
@@ -259,8 +256,8 @@ class TableList(QWidget):
     def updateButtonsForTable(self, table):
         """update button status for the currently selected table"""
         hasTable = bool(table)
-        suspended = hasTable and table.status.startswith('Suspended')
-        running = hasTable and table.status.startswith('Running')
+        suspended = hasTable and bool(table.suspendedAt)
+        running = hasTable and table.running
         suspendedLocalGame = suspended and table.gameid and self.client.hasLocalServer()
         self.joinButton.setEnabled(hasTable and
             not running and
@@ -304,7 +301,9 @@ class TableList(QWidget):
 
     def newTable(self):
         """I am a slot"""
-        if self.client.hasLocalServer():
+        if InternalParameters.ruleset:
+            ruleset = InternalParameters.ruleset
+        elif self.client.hasLocalServer():
             ruleset = self.client.ruleset
         else:
             selectDialog = SelectRuleset(self.client.host)
@@ -312,7 +311,7 @@ class TableList(QWidget):
                 return
             ruleset = selectDialog.cbRuleset.current
         deferred = self.client.callServer('newTable', ruleset.toList(),
-            InternalParameters.playOpen, InternalParameters.autoPlay, self.__wantedGame()).addErrback(self.tableError)
+            InternalParameters.playOpen, InternalParameters.demo, self.__wantedGame()).addErrback(self.tableError)
         if self.client.hasLocalServer():
             deferred.addCallback(self.newLocalTable)
         self.__requestedNewTable = True
@@ -320,15 +319,15 @@ class TableList(QWidget):
     def gotTables(self, tables):
         """got tables for first time. If we play a local game and we have no
         suspended game, automatically start a new one"""
-        clientTables = list(ClientTable.fromList(self.client, x) for x in tables)
-        if not InternalParameters.autoPlay:
+        clientTables = list(ClientTable(self.client, *x) for x in tables) # pylint: disable=W0142
+        if not InternalParameters.demo:
             if self.client.hasLocalServer():
                 # when playing a local game, only show pending tables with
                 # previously selected ruleset
                 clientTables = list(x for x in clientTables if x.ruleset == self.client.ruleset)
-        if InternalParameters.autoPlay or (not clientTables and self.client.hasLocalServer()):
+        if InternalParameters.demo or (not clientTables and self.client.hasLocalServer()):
             deferred = self.client.callServer('newTable', self.client.ruleset.toList(), InternalParameters.playOpen,
-                InternalParameters.autoPlay,
+                InternalParameters.demo,
                 self.__wantedGame()).addErrback(self.tableError)
             if deferred:
                 deferred.addCallback(self.newLocalTable)
@@ -347,7 +346,6 @@ class TableList(QWidget):
     def joinTable(self):
         """join a table"""
         table = self.selectedTable()
-        self.__requestedNewTable = table.status.startswith('Suspended') # because tableid will change
         self.client.callServer('joinTable', table.tableid).addErrback(self.tableError)
 
     def compareRuleset(self):
@@ -364,7 +362,7 @@ class TableList(QWidget):
 
     def tableError(self, err):
         """log the twisted error"""
-        if not self.client.perspective:
+        if not self.client.connectedWithServer:
             # lost connection to server
             for table in self.view.model().tables:
                 if table.chatWindow:
@@ -377,7 +375,6 @@ class TableList(QWidget):
     def leaveTable(self):
         """leave a table"""
         table = self.selectedTable()
-        self.__requestedNewTable = table.status.startswith('Suspended') # because tableid will change
         self.client.callServer('leaveTable', table.tableid).addErrback(self.tableError)
 
     def __keepChatWindows(self, tables):
@@ -446,6 +443,6 @@ class TableList(QWidget):
             self.newButton.setFocus()
         else:
             _ = [x for x in tables if x.tableid >= preselectTableId]
-            self.selectTable(tables.index(_[0]))
+            self.selectTable(tables.index(_[0]) if _ else 0)
         self.updateButtonsForTable(self.selectedTable())
         self.view.setFocus()

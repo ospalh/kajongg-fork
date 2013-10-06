@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """Copyright (C) 2009,2010 Wolfgang Rohdewald <wolfgang@rohdewald.de>
+Copyright © 2013 Roland Sieker <ospalh@gmail.com>
 
 kajongg is free software you can redistribute it and/or modifys
 it under the terms of the GNU General Public License as published by
@@ -23,8 +24,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 # The KDE translation teams will "automatically" translate name and
 # description into many languages.
 
-from rule import Rule, PredefinedRuleset
+from rule import PredefinedRuleset, Rule, Ruleset
 from util import m18nE, m18n
+
 
 class ClassicalChinese(PredefinedRuleset):
 
@@ -35,7 +37,7 @@ class ClassicalChinese(PredefinedRuleset):
     def __init__(self, name=None):
         PredefinedRuleset.__init__(self, name or m18nE('Classical Chinese standard'))
 
-    def initRuleset(self):
+    def _initRuleset(self):
         """sets the description"""
         self.description = m18n('Classical Chinese')
 
@@ -73,10 +75,9 @@ class ClassicalChinese(PredefinedRuleset):
                 description=m18n('East says Mah Jong with the unmodified dealt tiles')))
         self.winnerRules.add(Rule('Blessing of Earth', 'FBlessingOfEarth||Olastsource=1', limits=1,
                 description=m18n('South, West or North says Mah Jong with the first tile discarded by East')))
-        # the next rule is never proposed, the program applies it when appropriate. Do not change the XEAST9X.
-        # XEAST9X is meant to never match a hand, and the program will identify this rule by searching for XEAST9X
-        self.winnerRules.add(Rule('East won nine times in a row', r'XEAST9X', limits=1,
+        self.winnerRules.add(Rule('East won nine times in a row', 'FEastWonNineTimesInARow||Orotate', limits=1,
                 description=m18n('If that happens, East gets a limit score and the winds rotate')))
+
     def addPenaltyRules(self):
         """as the name says"""
         self.penaltyRules.add(Rule(
@@ -111,6 +112,17 @@ class ClassicalChinese(PredefinedRuleset):
         self.parameterRules.add(Rule('must declare calling hand',
                 'boolmustDeclareCallingHand||Omandatory', parameter=False,
                 description=m18n('Mah Jongg is only allowed after having declared to have a calling hand')))
+        # Two rules that are used for Japanese style games.
+        self.parameterRules.add(Rule(
+                'Chinese game', 'intbasicStyle||Ointernal||Omandatory',
+                parameter=Ruleset.Chinese, description=m18n('''\
+When this is set to Ruleset.Japanese, scoring, rotation and a number of \
+other things are handled differently.''')))
+        self.parameterRules.add(Rule(
+                'No repeat points', 'intrepeatValue||Ointernal',
+                parameter=0, description=m18n('''\
+The number of points added for each draw or East win in Japanese games.''')))
+
 
     def loadRules(self):
         """define the rules"""
@@ -164,6 +176,8 @@ class ClassicalChinese(PredefinedRuleset):
         # possible. If a special hand matches the standard pattern, do not put it here
         # All mjRule functions must have a winningTileCandidates() method
         self.mjRules.add(Rule('Standard Mah Jongg', 'FStandardMahJongg', points=20))
+        # option internal makes it not show up in the ruleset editor
+        self.mjRules.add(Rule('Standard Rotation', 'FStandardRotation||Orotate||Ointernal'))
         self.mjRules.add(Rule('Nine Gates', 'FGatesOfHeaven||OlastExtra', limits=1,
                 description=m18n('All tiles concealed of same color: Values 1-1-1-2-3-4-5-6-7-8-9-9-9 completed '
                 'with another tile of the same color (from wall or discarded)')))
@@ -208,9 +222,9 @@ class ClassicalChineseDMJL(ClassicalChinese):
     def __init__(self, name=None):
         ClassicalChinese.__init__(self, name or m18nE('Classical Chinese DMJL'))
 
-    def initRuleset(self):
+    def _initRuleset(self):
         """sets the description"""
-        ClassicalChinese.initRuleset(self)
+        ClassicalChinese._initRuleset(self)
         self.description = m18n('Classical Chinese as defined by the Deutsche Mah Jongg Liga (DMJL) e.V.')
 
     def loadRules(self):
@@ -247,9 +261,9 @@ class ClassicalChineseBMJA(ClassicalChinese):
     def __init__(self, name=None):
         ClassicalChinese.__init__(self, name or m18nE('Classical Chinese BMJA'))
 
-    def initRuleset(self):
+    def _initRuleset(self):
         """sets the description"""
-        ClassicalChinese.initRuleset(self)
+        ClassicalChinese._initRuleset(self)
         self.description = m18n('Classical Chinese as defined by the British Mah-Jong Association')
 
     def addParameterRules(self):
@@ -328,8 +342,508 @@ class ClassicalChineseBMJA(ClassicalChinese):
         self.loserRules.add(Rule('Calling for Fourfold Plenty', 'FCallingHand||Ohand=FourfoldPlenty', limits=0.4))
         self.loserRules.add(Rule('Calling for Purity', 'FCallingHand||Ohand=Purity', doubles=3))
 
+
+class JapaneseStyleRuleset(PredefinedRuleset):
+    """
+    Ruleset for Japanese style mahjong.
+
+    This is a work in progress. The goal is to implement complete
+    Riichi mahjong. At the moment this only implement those things
+    that can be easily addapted from the existing rules.
+    """
+
+    def __init__(self, name=None):
+        u"""Initialize the rules."""
+        PredefinedRuleset.__init__(
+            self, name or m18nE(u'Japanese style rules (EMA)'))
+
+    def _initRuleset(self):
+        """Sets the description"""
+        self.description = m18n(
+            u'Japanese style rules, according to the EMA (work in progress)')
+
+    def addManualRules(self):
+        u"""
+        Add manual winner rules.
+
+        Those are actually winner rules but in the kajongg scoring
+        mode they must be selected manually.
+        """
+        self.winnerRules.add(Rule(
+                'After a kong', 'FLastTileFromDeadWall||Olastsource=e',
+                doubles=1, description=m18n(u'''\
+Winning on a replacement tile after declaring a kong. Counts as self-draw. \
+(Rinshan kaihou)''')))
+        self.winnerRules.add(Rule(
+                'Robbing the kong', r'FRobbingKong||Olastsource=k', doubles=1,
+                description=m18n(
+                    'Mahjong when a pung is extended to kong (Chan kan)'),
+                debug=True))
+        self.winnerRules.add(Rule(
+                'Bottom of the sea (tsumo)',
+                'FIsLastTileFromWall||Olastsource=z', doubles=1,
+                description=m18n(u'''\
+Selfdraw mahjong on the last tile of the wall. (Haitei)''')))
+        self.winnerRules.add(Rule(
+                'Bottom of the sea (ron)',
+                'FIsLastTileFromWallDiscarded||Olastsource=Z', doubles=1,
+                description=m18n('''\
+Mahjong on the discard after the last tile in the wall. (Houtei)''')))
+
+        # self.winnerRules.add(Rule('Mah Jongg with Original Call',
+        #         'FMahJonggWithOriginalCall||Odeclaration=a', doubles=1,
+        #         description=m18n('''\
+        # NB. THe original call code can be used as inspiration for
+        # riichi code''')))
+        # Yakuman (limit) hands. The scoring is done
+        # with a table.
+        self.winnerRules.add(Rule(
+                'Blessing of Heaven', 'FBlessingOfHeaven||Olastsource=1',
+                limits=1, description=m18n(
+                    'East mahjong on initial fourteen tiles (Tenho)')))
+        self.winnerRules.add(Rule(
+                'Blessing of Earth',
+                'FBlessingOfEarth||Olastsource=1||Ono_claim',
+                # I don’t know whether the lastsource has any effect,
+                # but riichi rules require that nobody has made any
+                # claim (including concealed kongs).
+                limits=1, description=m18n(
+                    'Mahjong on selfdraw in the first round (Chiho)')))
+        # Japanese Blessing of Earth may need to get its own rule, to
+        # make sure nobody has called anything.
+        # self.winnerRules.add(Rule(
+        #        'Blessing of Man', 'FBlessingOfMan||Olastsource=1||Ono_claim',
+        #        limits=1, description=m18n(
+        #             'Mahjong on discard in the first round (Renho)')))
+
+    def addPenaltyRules(self):
+        """Set penalty rules"""
+        # There are two types of penalty the software can deal with in
+        # theory, dead hand and chombo. TODO.
+        self.penaltyRules.add(Rule(
+                'Long Hand', r'FLongHand||Oabsolute', points=0, doubles=0,
+                description=m18n('The hand contains too many tiles')))
+        # Too many tiles is one example of a dead hand.
+        # Maybe we can add the “fed fourth wind pung/third dragon
+        # pung” here.
+
+    def addHandRules(self):
+        """
+        Rules for the hand.
+
+        There are no rules for non-winning hand when scoring Japanese
+        style.
+        """
+        pass
+
+    def loadRules(self):
+        """
+        Load the rules.
+
+        Load the rules. A lot of these are basically the same as the
+        Chinese rules, but with different names. The names used here
+        are taken from the English European Mahjong Association (EMA)
+        Riichi rules.
+        """
+        self.addParameterRules()  # must be first!
+        self.addPenaltyRules()
+        self.addManualRules()
+
+        # Only hands matching an mjRule can win. Keep this list as
+        # short as possible. If a special hand matches the standard
+        # pattern, do not put it here All mjRule functions must have a
+        # winningTileCandidates() method
+        self.mjRules.add(Rule(
+                'Standard mahjong', 'FStandardMahJongg', points=20))
+        self.mjRules.add(Rule(
+                'Standard concealed ron', 'FStandardConcealedRon', points=30))
+        self.mjRules.add(Rule(
+                'Seven pairs', 'FSevenPairs',  points=25,
+                description=m18n(u'''\
+The points for winning with seven pairs. See also winner rules.''')))
+        # There is the special rule “Seven Pairs always scores exactly
+        # 25 minipoints; extra minipoints for e.g. a pair of dragons
+        # is not awarded.” That is dealt with in the dragon and wind
+        # pair meld rules and the other waiting pattern and last tile
+        # is.
+        # There is one more catch: in general the fu/minipoints/points
+        # are rounded up to full tens, *except* for the 25 from seven
+        # pairs. As the 25 is the only odd number, we just check for
+        # 25 in the Score class rather then drag around another option
+        # with the score. So changing this may cause problems. But see
+        # Kansai rules below for a safe way to change this.
+        self.mjRules.add(Rule(
+                'Thirteen Orphans', 'FThirteenOrphans||Omayrobhiddenkong',
+                limits=1, description=m18n('''\
+Concealed hand with one of each of the 13 different terminal and honour tiles \
+plus one extra terminal or honour tile. (Kokushi musou)''')))
+        self.mjRules.add(Rule(
+                'Nine Gates', 'FGatesOfHeaven||OJapanese', limits=1,
+                description=m18n('''\
+Concealed hand consisting of the tiles 1112345678999 in the same suit plus \
+any one extra tile in the same suit. (Chuuren pooto)''')))
+
+        self.mjRules.add(Rule(
+                'Riichi rotaion rules',
+                'FJapaneseRotation||Orotate||Ointernal'))
+
+        # The list of yaku, from 1 to 13.
+        # One yaku (Some are two yaku when concealed.)
+        # self.winnerRules.add(Rule(
+        #         'Riichi', 'FRiichi', doubles=1, description=m18n(u'''\
+# Concealed waiting hand declared at 1000 points stake. (Riichi)''')))
+        self.winnerRules.add(Rule(
+                'Fully concelaned hand', 'FFullyConcealed', doubles=1,
+                description=m18n(
+                    u'Selfdraw on a concealed hand (Menzen tsumo)')))
+        self.winnerRules.add(Rule(
+                'All simples', 'FAllSimples', doubles=1, description=m18n(u'''\
+Concealed hand with no terminals and honours. (Tanyao chuu)''')))
+        self.winnerRules.add(Rule(
+                'Concealend pinfu', 'FConcealedPinfu', doubles=1,
+                 description=m18n('''\
+Concealed all chows hand with a valueless pair. Must finish on \
+a two-sided wait.''')))
+        self.winnerRules.add(Rule(
+                'Pure double chow', 'FPureDoubleChow', doubles=1,
+                description=m18n(u'''\
+Concealed hand with two completely identical chows, i.e. the same \
+values in the same suit. (Iipeikou) ''')))
+        self.winnerRules.add(Rule(
+                'Mixed triple chow', 'FTripleChow', doubles=1,
+                description=m18n(u'''\
+Hand with three chows of the same numerical sequence, one in each \
+suit.  (San shoku doujun) ''')))
+        self.winnerRules.add(Rule(
+                'Concealed mixed triple chow bonus', 'FTripleChowBonus',
+                doubles=1, description=m18n(u'''\
+Bonus yaku for a mixed triple chow hand being concealed. \
+(San shoku doujun)''')))
+        self.winnerRules.add(Rule(
+                'Pure straight', 'FPureStraight', doubles=1, description=u'''\
+Hand with three consecutive chows in the same suit. (Itsu)'''))
+        self.winnerRules.add(Rule(
+                'Concealed pure straight bonus', 'FPureStraightBonus',
+                doubles=1, description=m18n(u'''\
+Bonus yaku for a pure straight hand being concealed. \
+(Itsu)''')))
+        self.winnerRules.add(Rule(
+                'Outside hand', 'FOutsideHand', doubles=1,
+                description=m18n('''\
+All sets contain terminals or honours, and the pair is \
+terminals or honours. The hand contains at least one chow. (Chanta)''')))
+        self.winnerRules.add(Rule(
+                'Concealed Outside hand bonus', 'FOutsideHandBonus',
+                doubles=1, description=m18n(u'''\
+Bonus yaku for an outside hand being concealed. (Chanta)''')))
+
+        # Four more one-yaku are in addManualRules(), as you can’t
+        # recoginze them from just the tiles:
+        # * After a kong
+        # * Robbing the kong
+        # * Under the sea, ron
+        # * Under the sea, tsumo
+
+        # Two yaku hands: Seven pairs is at mjRules above, too. (It
+        # may also be a one-yaku hand. See the Kanto rules below.)
+
+        self.winnerRules.add(Rule(
+                'Seven pairs yaku', 'FSevenPairs', doubles=2,
+                description=m18n(u'''\
+The doubles for winning with seven pairs. See also Mah-jongg rules.''')))
+        self.winnerRules.add(Rule(
+                'Triple pung', 'FTriplePung', doubles=2, description=u'''\
+Hand with three pungs/kongs, one in each suit, of the same
+number. (San shoku dokou)'''))
+        self.winnerRules.add(Rule(
+                'Three concealend pungs', 'FThreeConcealedPungsOrKongs',
+                doubles=2, description=m18n(u'''\
+Hand with three hidden pungs. (Complete hand may be open.) (San ankou)''')))
+        self.winnerRules.add(Rule(
+                'All pungs', 'FAllPungs', doubles=2, description=u'''\
+Hand with four pungs/kongs and a pair. (Toi-toi hou)'''))
+        self.winnerRules.add(Rule(
+                'Half flush', 'FFalseColorGame', doubles=2,
+                description=m18n('''\
+Hand with tiles from only one of the three suits, in combination with \
+honours. (Honitsu) ''')))
+        self.winnerRules.add(Rule(
+                'Concealed half flush bonus', 'FHalfFlushBonus', doubles=1,
+                description=m18n('''\
+Bonus yaku for a half flush hand being concealed. (Honitsu) ''')))
+        self.handRules.add(Rule(
+                'Little three dragons', 'FLittleThreeDragons', doubles=2,
+                description=m18n(u'''\
+Hand with two dragon pungs/kongs and a pair of dragons. (Shou sangen)''')))
+        self.winnerRules.add(Rule(
+                'All terminals and honours', 'FOnlyMajors', doubles=2,
+                 description=m18n(u'''\
+Hand containing only terminals and honours. (Honroutou)''')))
+        self.winnerRules.add(Rule(
+                'Terminals in all sets', 'FTerminalsInAll', doubles=2,
+                description=m18n(u'''\
+All sets contain terminals, and the pair is terminals. Hand contains a chow. \
+(Junchan)''')))
+        self.winnerRules.add(Rule(
+                'Terminals in all sets bonus', 'FTerminalsInAllBonus',
+                doubles=1, description=m18n('''\
+Bonus yaku for a terminals in all sets hand being concealed. (Junchan) ''')))
+
+
+        # Three yaku
+        self.winnerRules.add(Rule(
+                'Twice pure double chows', 'FTwicePureDoubleChow',
+                doubles=3, description=m18n(u'''\
+Concealed hand with four chows which two and two form Pure Double
+Chows (Ryan peikou)''')))
+
+        # Five yaku (Starting at five fan (yaku + dora) the
+        # fu/minipoints/points are always ignored)
+        self.winnerRules.add(Rule(
+                'Full flush', 'FTrueColorGame', doubles=5,
+                description=m18n('''\
+Hand composed entirely of tiles from only one of the three suits. No \
+honours allowed. (Chinitsu)''')))
+        self.winnerRules.add(Rule(
+                'Concealed full flush bonus', 'FFullFlushBonus', doubles=1,
+                description=m18n('''\
+Bonus yaku for a full flush hand being concealed. (Chinitsu)''')))
+
+        # Nagashi mangan is a bit curious. Counts like a win, but is a
+        # loser hand.
+        # self.loserRules.add(Rule('Nagashi mangan', 'FNagashi mangan'...))
+
+        # The Yakuman (thirteen yaku) hands
+        # Thirteen Orphans and  Nine Gates are at mjRules above.
+        # The Blessings of NN (first round win) are at manualRules,
+        # as they have to be checked by hand for manual scoring.
+
+        # The extra “rule” “Winning on a discard is allowed only in
+        # case of single wait on the pair.”  is actually a
+        # tautology. When you call any of the four pungs, even as the
+        # last tile, that last pung is not concealed, even if the
+        # whole hand is concealed*.
+        self.winnerRules.add(Rule(
+                'Four concealed pungs', 'FFourConcealedPungsOrKongs',
+                limits=1, description=m18n(
+                    'Concealend hand with four pungs/kongs (Suu ankou)')))
+        self.winnerRules.add(Rule(
+                'Four kongs', 'FFourfoldPlenty', limits=1,
+                description=m18n('Hand with four kongs (Suu kan tsu)')))
+        self.winnerRules.add(Rule(
+                'All green', 'FAllGreen',  limits=1, description=m18n(u'''\
+Hand composed entirely of green tiles. Green tiles are: \
+green dragons and 2, 3, 4, 6 and 8 of bamboo (Ryuu iisou)''')))
+        self.winnerRules.add(Rule(
+                'All terminals', 'FAllTerminals', limits=1, description=m18n(
+                    'Hand composed entirely of terminal tiles. (Chinrouto)')))
+        self.winnerRules.add(Rule(
+                'All Honours', 'FOnlyHonors', limits=1, description=m18n(u'''\
+Hand composed entirely of honour tiles. (Tsuu iisou)''')))
+        self.winnerRules.add(Rule(
+                'Big three dragons', 'FBigThreeDragons', limits=1,
+                description=m18n(
+                    ' Hand with three pungs/kongs of dragons. (Dai sangen)')))
+        self.winnerRules.add(Rule(
+                'Little four winds', 'FLittleFourJoys', limits=1,
+                description=m18n(u'''\
+Hand with three pungs/kongs of winds and a pair of . (Shou suushi)''')))
+        self.winnerRules.add(Rule(
+                'Big four winds', 'FBigFourJoys', limits=2, limits_limit=2,
+                description=m18n(u'''\
+Hand with three pungs/kongs of winds. Double yakuman. \
+(Dai suushi)''')))
+
+        # The waiting pattern, open(!) pinfu and tsumo points.
+        self.winnerRules.add(Rule(
+                'Single wait', 'FSingleWait', points=2, description=m18n(u'''\
+Last tile completes the pair. Not applied for seven pairs. \
+Not allowed for concealed pinfu.''')))
+        self.winnerRules.add(Rule(
+                'Edge wait', 'FEdgeWait', points=2, description=m18n(u'''\
+Last tile is a 3, completing a 1-2-3 chow or a 7, completing a 7-8-9 chow. \
+Not allowed for concealed pinfu.''')))
+        self.winnerRules.add(Rule(
+                'Closed wait', 'FClosedWait', points=2, description=m18n(u'''\
+Last tile completes the middle of a chow, e.g. having 4 and 6 on the hand and \
+drawing or claiming a 5. Not allowed for concealed pinfu''')))
+        self.winnerRules.add(Rule(
+                'Tsumo', 'FSelfDraw', points=2, description=m18n(u'''\
+Self-drawn last tile. Not applied for concealed pinfu.''')))
+
+        # Points for the hand.
+        # First the yaku melds
+        self.meldRules.add(Rule(
+                'Dragons pung', 'FDragonPungKong', doubles=1, description=m18n(
+                    u'Pung/kong of dragons (Fanpai)')))
+        self.meldRules.add(Rule(
+                'Seat wind pung', 'FOwnWindPungKong', doubles=1,
+                description=m18n(
+                    u'Pung/kong of the seat wind (Fanpai)')))
+        self.meldRules.add(Rule(
+                'Prevailing wind pung', 'FRoundWindPungKong', doubles=1,
+                description=m18n(
+                    u'Pung/kong of the seat wind (Fanpai)')))
+        # And the non-yaku melds
+        self.meldRules.add(Rule(
+                'Open kong, 2..8', 'FExposedMinorKong', points=8))
+        self.meldRules.add(Rule(
+                'Open kong, terminals', 'FExposedTerminalsKong', points=16))
+        self.meldRules.add(Rule(
+                'Open kong, honours', 'FExposedHonorsKong', points=16))
+        self.meldRules.add(Rule(
+                'Open pung, 2..8', 'FExposedMinorPung', points=2))
+        self.meldRules.add(Rule(
+                'Open pung, terminals', 'FExposedTerminalsPung', points=4))
+        self.meldRules.add(Rule(
+                'Open pung, honours', 'FExposedHonorsPung', points=4))
+        # Concealed melds:
+        self.meldRules.add(Rule(
+                'Concealed kong, 2..8', 'FConcealedMinorKong', points=16))
+        self.meldRules.add(Rule(
+                'Concealed kong, terminals', 'FConcealedTerminalsKong',
+                points=32))
+        self.meldRules.add(Rule(
+                'Concealed kong, honours', 'FConcealedHonorsKong', points=32))
+        self.meldRules.add(Rule(
+                'Concealed pung, 2..8', 'FConcealedMinorPung', points=4))
+        self.meldRules.add(Rule(
+                'Concealed pung, terminals', 'FConcealedTerminalsPung',
+                points=8))
+        self.meldRules.add(Rule(
+                'Concealed pung, honours', 'FConcealedHonorsPung', points=8))
+        self.meldRules.add(Rule(
+                'Pair of seat wind', 'FOwnWindPair||Onot_7pairs', points=2))
+        self.meldRules.add(Rule(
+                'Pair of prevailing wind', 'FRoundWindPair||Onot_7pairs',
+                points=2))
+        self.meldRules.add(Rule(
+                'Pair of dragons', 'FDragonPair||Onot_7pairs', points=2))
+
+    def addParameterRules(self):
+        u"""
+        Set some parameters.
+
+        Some general parameters. For most of them it doesn’t make much
+        sense to change them. Some values make no sense at all here,
+        so they are just hard-coded in to some value.
+        """
+        self.parameterRules.add(Rule(
+                'Japanese game', 'intbasicStyle||Ointernal',
+                parameter=Ruleset.Japanese))
+        self.parameterRules.add(Rule(
+                'Points for mangan', 'intlimit||Omandatory', parameter=2000,
+                description=m18n(u'''\
+The points for a mangan or five fan (doubles) hand. Higher limits \
+(yakuman &c.) are calculated from this.''')))
+        self.parameterRules.add(Rule(
+                'Repeat points', 'intrepeatValue||Omandatory',
+                parameter=100, description=m18n('''\
+The number of points added for each draw or East win.''')))
+        self.parameterRules.add(Rule(
+                'Play with the roof off', 'boolroofOff||Omandatory||Ointernal',
+                parameter=False))
+        self.parameterRules.add(Rule(
+                'Size of the dead wall',
+                'intkongBoxSize||Omandatory||Ointernal',
+                parameter=14))
+        self.parameterRules.add(Rule(
+                'Minipoints (fu) needed to win', 'intminMJPoints||Omandatory',
+                parameter=0))
+        self.parameterRules.add(Rule(
+                'Minimum number of yaku (doubles) needed to win',
+                'intminMJDoubles||OMandatory', parameter=0))
+        # This should be 1. Until we have riichi declaration up and
+        # running, use 0 instead.
+        self.parameterRules.add(Rule(
+                'Claim Timeout', 'intclaimTimeout||Omandatory', parameter=5))
+        # The EMA rules say 3s. May be too quick for beginners.
+        self.parameterRules.add(Rule(
+                'Play with Bonus Tiles',
+                'boolwithBonusTiles||OMandatory||Ointernal',
+                parameter=False,))
+        self.parameterRules.add(Rule(
+                'Number of rounds in game', 'intminRounds||OMandatory',
+                parameter=2, description=m18n(
+                    'Only east and south wind rounds are played.')))
+        self.parameterRules.add(Rule(
+                'Number of allowed chows',
+                'intmaxChows||Omandatory||Ointernal',
+                 parameter=4,))
+        self.parameterRules.add(Rule(
+                'Must declare calling hand',
+                'boolmustDeclareCallingHand||Omandatory', parameter=False,
+                description=m18n(
+                    'Only riichi must be declared.')))
+        self.parameterRules.add(Rule(
+                'Double yakuman', 'booldouble_yakuman',  parameter=False,
+                description=m18n(u'''\
+Allow double yakuman. (Big four winds always counts as double yakuman)''')))
+
+
+class JapaneseJapaneseStyleRuleset(JapaneseStyleRuleset):
+    """
+    Ruleset for Japanese style mahjong.
+
+    This is a variant of the EMA Japanese rules, as the game is played
+    in Japan, according to the EMA rules preface.
+
+    The EMA rules mentions two differences:
+    1. All simples may be open. This is the change that is implemented.
+    2. There is no two-yaku requirement when there are five or more
+       (repeat) counters.
+    3. When calling a chow/chi, in Japan it is forbidden to discard
+       the called tyle again. TODO. (Not sure about the point of
+       this. Calling that chi in the first place would be an
+       oversight, i guess.)
+    """
+
+    def __init__(self, name=None):
+        u"""Initialize the rules."""
+        JapaneseStyleRuleset.__init__(
+            self, name or m18nE(u'Japanese style rules (Japanese)'))
+
+    def _initRuleset(self):
+        """Sets the description"""
+        self.description = m18n(
+            u'Japanese style rules, Japanese variant (work in progress)')
+
+    def loadRules(self):
+        JapaneseStyleRuleset.loadRules(self)
+        # One difference: in Japan, all simples may be open.
+        del self.winnerRules['All simples']
+        self.winnerRules.add(Rule(
+                'All simples', 'FAllSimples||Omay_be_open', doubles=1,
+                description=m18n(u'''\
+Hand with no terminals and honours. (Tanyao chuu)''')))
+
+class KansaiJapaneseStyleRuleset(JapaneseJapaneseStyleRuleset):
+    u"""
+    Slight variaton of Japanese Riichi rules.
+
+    According to Wikipedia, in the Kansai region, Seven Pairs is 50
+    fu, one yaku.
+    """
+
+    def __init__(self, name=None):
+        u"""Initialize the rules."""
+        JapaneseJapaneseStyleRuleset.__init__(
+            self, name or m18nE(u'Japanese style rules (Kansai)'))
+
+    def _initRuleset(self):
+        """Sets the description"""
+        self.description = m18n(
+            u'Japanese style rules, Kansei variant (work in progress)')
+
+    def loadRules(self):
+        JapaneseJapaneseStyleRuleset.loadRules(self)
+        self.winnerRules['Seven pairs yaku'].doubles = 1
+        self.winnerRules['Seven pairs'].points = 50
+
+
 def loadPredefinedRulesets():
     """add new predefined rulesets here"""
     if not PredefinedRuleset.classes:
         PredefinedRuleset.classes.add(ClassicalChineseDMJL)
         PredefinedRuleset.classes.add(ClassicalChineseBMJA)
+        PredefinedRuleset.classes.add(JapaneseStyleRuleset)

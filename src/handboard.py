@@ -27,8 +27,8 @@ from meld import Meld, EXPOSED, CONCEALED, REST, tileKey, elementKey, meldKey, s
 from hand import Hand
 from board import Board, rotateCenter
 
-from util import m18n, logDebug, isAlive
-from common import Preferences, InternalParameters, Debug
+from util import m18n, logDebug
+from common import Preferences, InternalParameters, Debug, isAlive
 from animation import animate
 
 class TileAttr(object):
@@ -64,8 +64,11 @@ class TileAttr(object):
                 logDebug('TileAttr %s:%s' % (self.element, self.focusable))
 
     def __str__(self):
-        return '%s %.1f/%.1f%s%s' % (self.element, self.xoffset, self.yoffset, ' dark' if self.dark else '', \
+        return '%s %.2f/%.1f%s%s' % (self.element, self.xoffset, self.yoffset, ' dark' if self.dark else '', \
             ' focusable' if self.focusable else '')
+
+    def __repr__(self):
+        return 'TileAttr(%s)' % str(self)
 
 class HandBoard(Board):
     """a board showing the tiles a player holds"""

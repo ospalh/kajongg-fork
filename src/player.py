@@ -27,6 +27,7 @@ from query import Transaction, Query
 from tile import Tile
 from meld import Meld, CONCEALED, PUNG, hasChows, meldsContent
 from hand import Hand
+from rule import Ruleset
 
 class Players(list):
     """a list of players where the player can also be indexed by wind.
@@ -89,7 +90,7 @@ class Players(list):
             Players.load()  # maybe somebody else already added it
             if name not in Players.allNames.values():
                 with Transaction():
-                    Query("insert into player(name) values(?)",
+                    Query("insert or ignore into player(name) values(?)",
                           list([name]))
                 Players.load()
         assert name in Players.allNames.values(), '%s not in %s' % (name, Players.allNames.values())
@@ -120,6 +121,7 @@ class Player(object):
         self.visibleTiles = IntDict(game.visibleTiles)
         self.clearHand()
         self.__lastSource = '1' # no source: blessing from heaven or earth
+        self.ippatsu_chance = False  # First round after riichi-call?
         self.remote = None # only for server
         self.voice = None
         self.handBoard = None
@@ -149,7 +151,9 @@ class Player(object):
         self.playedDangerous = False
         self.usedDangerousFrom = None
         self.isCalling = False
+        self.ippatsu_chance = False
         self.__hand = None
+        self.ippatsu_chance = False
 
     def invalidateHand(self):
         """some source for the computation of current hand changed"""
@@ -314,6 +318,7 @@ class Player(object):
             self.lastSource = 'e'
         else:
             self.game.lastDiscard = None
+            self.game.lastDiscardBy = None
             self.lastSource = 'w'
         return tile
 
@@ -454,6 +459,9 @@ class Player(object):
         else:
             self.game.lastDiscard = Tile(tileName)
         self.game.lastDiscard.element = self.game.lastDiscard.upper()
+        self.game.lastDiscardBy = self
+        # To add insult to injury, we even may have to pay for
+        # everybody.
 
     def scoreMatchesServer(self, score):
         """do we compute the same score as the server does?"""
@@ -472,6 +480,10 @@ class Player(object):
         """returns True if the player has no choice, otherwise False.
         Exposing may be a meld which will be exposed before we might
         play dangerous"""
+        if self.game.ruleset.basicStyle == Ruleset.Japanese:
+            # There is no *especially* dangerous play in Riichi. The
+            # discarder *always* pays for all on ron.
+            return False
         if self == self.game.activePlayer and exposing and len(exposing) == 4:
             # declaring a kong is never dangerous because we get
             # an unknown replacement
@@ -488,6 +500,37 @@ class Player(object):
                     # the "if" is needed for claimed pung
                     afterExposed.remove(tileName.lower())
         return all(self.game.dangerousFor(self, x) for x in afterExposed)
+
+    def shouldShowTiles(self):
+        u"""
+        Return whether we should show the tiles at the end of a hand.
+
+        For Chinese style games, this always returns true, as the
+        losers hand are also evaluated.
+        For Japanese style, the rules are quite complex:
+        * When there are winners, only their hands are shown.
+        * When four riichi declarations cause an abortive draw, the
+          tenpai hands must be shown
+        * While not explicit in the EMA rules, when claiming an
+          abortive draw because of nine or more terminals/honours, the
+          hand should be shown.
+        * On an exhaustive draw, all players that have declared riichi
+          and players that are tenpai and do not want to pay the noten
+          penalty must show their hands.
+        Not all the rules are implemented yet.
+        """
+        if self.game.ruleset.basicStyle != Ruleset.Japanese \
+                or self.game.isScoringGame():
+            # Standard. Do show.
+            return True
+        # “Not all the rules” is a bit of a boast. At the moment we
+        # show the winner hand.
+        if self is self.game.winner:
+            # We have won. Show.
+            return True
+        # Riichi, abortive draws and noten penalties are not
+        # implemented yet.
+        return False
 
     def exposeMeld(self, meldTiles, calledTile=None):
         """exposes a meld with meldTiles: removes them from concealedTileNames,
@@ -624,12 +667,7 @@ class Player(object):
         melds.append(mjString)
         if mjString.startswith('M') and (withTile or self.lastTile):
             melds.append('L%s%s' % (withTile or self.lastTile, self.lastMeld.joined))
-        if self.game.eastMJCount == 8 and self == self.game.winner and self.wind == 'E':
-            # eastMJCount will only be inced later, in saveHand
-            rules = [self.game.ruleset.findRule('XEAST9X')]
-        else:
-            rules = None
-        return Hand.cached(self, ' '.join(melds), computedRules=rules, robbedTile=robbedTile)
+        return Hand.cached(self, ' '.join(melds), robbedTile=robbedTile)
 
     def computeNewHand(self):
         """returns the new hand. Same as current unless we need to discard. In that
@@ -652,6 +690,8 @@ class Player(object):
 
     def possibleChows(self, tileName=None, within=None):
         """returns a unique list of lists with possible claimable chow combinations"""
+        if self.game.lastDiscard is None:
+            return []
         exposedChows = [x for x in self.__exposedMelds if x.isChow()]
         if len(exposedChows) >= self.game.ruleset.maxChows:
             return []

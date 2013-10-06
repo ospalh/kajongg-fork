@@ -20,7 +20,7 @@
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
-from PyQt4.QtCore import Qt, QVariant
+from PyQt4.QtCore import Qt, QVariant, QSize
 from PyQt4.QtGui import QWidget, QHBoxLayout, QVBoxLayout, \
     QPushButton, QSpacerItem, QSizePolicy, \
     QTreeView, QFont, QAbstractItemView, QHeaderView
@@ -30,9 +30,10 @@ from util import m18n, m18nc, english, uniqueList
 from differ import RulesetDiffer
 from common import Debug
 from tree import TreeItem, RootItem, TreeModel
-from kde import Sorry
+from kde import Sorry, KApplication
 from modeltest import ModelTest
 from genericdelegates import RightAlignedCheckboxDelegate
+from statesaver import StateSaver
 
 class RuleRootItem(RootItem):
     """the root item for the ruleset tree"""
@@ -118,13 +119,6 @@ class RuleItem(RuleTreeItem):
                     column = colNames[column]
                 return unicode(getattr(content.score, column))
         return ''
-
-    def remove(self):
-        """remove this rule from the model and the database"""
-        ruleList = self.parent.rawContent
-        ruleList.remove(self.rawContent)
-        ruleset = self.parent.parent.rawContent
-        ruleset.dirty = True
 
     def tooltip(self):
         """tooltip for rule: just the name of the ruleset"""
@@ -245,7 +239,7 @@ class RuleModel(TreeModel):
         self.insertRows(0, ruleListItems, rulesetIndex)
         for ridx, ruleList in enumerate(ruleset.ruleLists):
             listIndex = self.index(ridx, 0, rulesetIndex)
-            ruleItems = list([RuleItem(x) for x in ruleList if x.name])
+            ruleItems = list([RuleItem(x) for x in ruleList if not 'internal' in x.options])
             self.insertRows(0, ruleItems, listIndex)
 
 class EditableRuleModel(RuleModel):
@@ -324,7 +318,8 @@ class EditableRuleModel(RuleModel):
                 else:
                     return False
             if dirty:
-                ruleset.dirty = True
+                if isinstance(content, Rule):
+                    ruleset.updateRule(content)
                 self.dataChanged.emit(index, index)
             return True
         except BaseException:
@@ -438,7 +433,7 @@ class RuleTreeView(QTreeView):
             return
         item = row.internalPointer()
         assert isinstance(item, RulesetItem)
-        self.model().appendRuleset(item.rawContent.copy())
+        self.model().appendRuleset(item.rawContent.copy(minus=True))
 
     def removeRow(self):
         """removes a ruleset or a rule"""
@@ -460,13 +455,15 @@ class RuleTreeView(QTreeView):
 
 class RulesetSelector( QWidget):
     """presents all available rulesets with previews"""
-    def __init__(self, parent):
+    def __init__(self, parent=None):
         super(RulesetSelector, self).__init__(parent)
         self.setContentsMargins(0, 0, 0, 0)
         self.setupUi()
 
     def setupUi(self):
         """layout the window"""
+        self.setWindowTitle(m18n('Customize rulesets') + ' - Kajongg')
+        self.setObjectName('Rulesets')
         hlayout = QHBoxLayout(self)
         v1layout = QVBoxLayout()
         self.v1widget = QWidget()
@@ -476,12 +473,11 @@ class RulesetSelector( QWidget):
         hlayout.addLayout(v2layout)
         for widget in [self.v1widget, hlayout, v1layout, v2layout]:
             widget.setContentsMargins(0, 0, 0, 0)
-        v1layout.setContentsMargins(0, 0, 0, 0)
-        v2layout.setContentsMargins(0, 0, 0, 0)
         hlayout.setStretchFactor(self.v1widget, 10)
         self.btnCopy = QPushButton()
         self.btnRemove = QPushButton()
         self.btnCompare = QPushButton()
+        self.btnClose = QPushButton()
         self.rulesetView = RuleTreeView(m18nc('kajongg','Rule'), self.btnCopy, self.btnRemove, self.btnCompare)
         v1layout.addWidget(self.rulesetView)
         self.rulesetView.setWordWrap(True)
@@ -493,37 +489,46 @@ class RulesetSelector( QWidget):
         self.btnCopy.clicked.connect(self.rulesetView.copyRow)
         self.btnRemove.clicked.connect(self.rulesetView.removeRow)
         self.btnCompare.clicked.connect(self.rulesetView.compareRow)
+        self.btnClose.clicked.connect(self.hide)
         v2layout.addItem(spacerItem)
+        v2layout.addWidget(self.btnClose)
         self.retranslateUi()
+        StateSaver(self)
+        self.show()
+
+    def sizeHint(self):
+        """we never want a horizontal scrollbar for player names,
+        we always want to see them in full"""
+        result = QWidget.sizeHint(self)
+        available = KApplication.kApplication().desktop().availableGeometry()
+        height = max(result.height(), available.height() * 2 // 3)
+        width = max(result.width(), available.width() // 2)
+        return QSize(width, height)
+
+    def minimumSizeHint(self):
+        """we never want a horizontal scrollbar for player names,
+        we always want to see them in full"""
+        return self.sizeHint()
+
+    def showEvent(self, dummyEvent):
+        """reload the rulesets"""
         self.refresh()
 
     def refresh(self):
-        """reload the rulesets"""
+        """retranslate and reload rulesets"""
+        self.retranslateUi()
         self.rulesetView.rulesets = Ruleset.availableRulesets()
 
-    def closeDiffers(self):
+    def hideEvent(self, event):
         """close all differ dialogs"""
         for differ in self.rulesetView.differs:
             differ.hide()
             del differ
-
-    def cancel(self):
-        """abort edititing, do not save"""
-        self.closeDiffers()
-
-    def save(self):
-        """saves all customized rulesets"""
-        self.closeDiffers()
-        if self.rulesetView.model():
-            for item in self.rulesetView.model().rootItem.children:
-                ruleset = item.rawContent
-                if not isinstance(ruleset, PredefinedRuleset):
-                    if not ruleset.save():
-                        return False
-        return True
+        QWidget.hideEvent(self, event)
 
     def retranslateUi(self):
         """translate to current language"""
-        self.btnCopy.setText(m18n("&Copy"))
-        self.btnRemove.setText(m18n("R&emove"))
-        self.btnCompare.setText(m18nc('Kajongg ruleset comparer', 'C&ompare'))
+        self.btnCopy.setText(m18n("Copy"))
+        self.btnCompare.setText(m18nc('Kajongg ruleset comparer', 'Compare'))
+        self.btnRemove.setText(m18n("Remove"))
+        self.btnClose.setText(m18n('Close'))

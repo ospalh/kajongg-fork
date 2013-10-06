@@ -23,8 +23,8 @@ from twisted.internet.defer import Deferred, succeed
 from PyQt4.QtCore import QPropertyAnimation, QParallelAnimationGroup, \
     QAbstractAnimation, QEasingCurve, QVariant
 
-from common import InternalParameters, Preferences, Debug
-from util import logDebug, isAlive
+from common import InternalParameters, Preferences, Debug, isAlive
+from util import logDebug
 
 class Animation(QPropertyAnimation):
     """a Qt4 animation with helper methods"""
@@ -34,7 +34,7 @@ class Animation(QPropertyAnimation):
     def __init__(self, target, propName, endValue, parent=None):
         QPropertyAnimation.__init__(self, target, propName, parent)
         QPropertyAnimation.setEndValue(self, endValue)
-        duration = (99 - Preferences.animationSpeed) * 100 // 4
+        duration = Preferences.animationDuration()
         self.setDuration(duration)
         self.setEasingCurve(QEasingCurve.InOutQuad)
         target.queuedAnimations.append(self)

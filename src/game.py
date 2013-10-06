@@ -22,8 +22,8 @@ import datetime
 from random import Random
 from collections import defaultdict
 from twisted.internet.defer import succeed
-from util import logError, logException, logDebug, m18n, isAlive, stack
-from common import WINDS, InternalParameters, elements, IntDict, Debug
+from util import logError, logWarning, logException, logDebug, m18n, stack
+from common import WINDS, InternalParameters, elements, IntDict, Debug, isAlive
 from query import Transaction, Query
 from rule import Ruleset
 from tile import Tile
@@ -111,7 +111,20 @@ class Game(object):
         self.shouldSave = shouldSave
         self.setHandSeed()
         self.activePlayer = None
+        # For Japanese play, declaring riichi in the first
+        # *uniterrupted* set of turns gives an extra yaku. A similar
+        # condition applies to Blessing of Earth and Blessing of
+        # Man. Keep track of that.
+        self.double_riichi_chance = True
+        # For Japanese play, count East wins and draws.  This adds
+        # points to the hand value.
+        self.repeat_counter = 0
+        # With Japanese play, riichi bets can carry over from one hand
+        # to the next on exhaustive draws. Keep track of those.
+        self.riichi_bets = 0
         self.__winner = None
+        self.__currentHandId = None
+        self.__prevHandId = None
         self.moves = []
         self.myself = None   # the player using this client instance for talking to the server
         self.gameid = gameid
@@ -122,9 +135,10 @@ class Game(object):
         self.handDiscardCount = 0
         self.divideAt = None
         self.lastDiscard = None # always uppercase
+        self.lastDiscardBy = None  # Who dropped the last tile.
         self.visibleTiles = IntDict()
         self.discardedTiles = IntDict(self.visibleTiles) # tile names are always lowercase
-        self.eastMJCount = 0
+        self.dice = []  # So some fancy graphics can show the throws
         self.dangerousTiles = list()
         self.csvTags = []
         self.setGameId()
@@ -145,6 +159,11 @@ class Game(object):
         if not self.isScoringGame() and '/' in self.wantedGame:
             part = self.wantedGame.split('/')[1]
             roundsFinished = 'ESWN'.index(part[0])
+            if roundsFinished > self.ruleset.minRounds:
+                logWarning('Ruleset %s has %d minimum rounds but you want round %d(%s)' % (
+                    self.ruleset.name, self.ruleset.minRounds, roundsFinished + 1, part[0]))
+                self.roundsFinished = self.ruleset.minRounds
+                return
             for _ in range(roundsFinished * 4 + int(part[1]) - 1):
                 self.rotateWinds()
             for char in part[2:]:
@@ -157,7 +176,7 @@ class Game(object):
             self.wall.decorate()
 
     @apply
-    def winner():
+    def winner(): # pylint: disable=E0202
         """the name of the game server this game is attached to"""
         def fget(self):
             # pylint: disable=W0212
@@ -166,6 +185,8 @@ class Game(object):
             # pylint: disable=W0212
             if self.__winner != value:
                 if self.__winner:
+                    # Hmm. This looks like a bit of code that needs
+                    # changing to allow multiple winners.
                     self.__winner.invalidateHand()
                 self.__winner = value
                 if value:
@@ -181,7 +202,7 @@ class Game(object):
         """as the name says"""
         return self.roundHandCount == 0 and self.roundsFinished == 0
 
-    def handId(self, withAI=True):
+    def handId(self, withAI=True, withMoveCount=False):
         """identifies the hand for window title and scoring table"""
         aiVariant = ''
         if withAI and self.belongsToHumanPlayer():
@@ -197,7 +218,13 @@ class Game(object):
             wind = 'X'
         else:
             wind = WINDS[self.roundsFinished]
-        return '%s%s/%s%s%s' % (aiVariant, self.seed, wind, self.rotated + 1, charId)
+        result = '%s%s/%s%s%s' % (aiVariant, self.seed, wind, self.rotated + 1, charId)
+        if withMoveCount:
+            result += '/moves:%d' % len(self.moves)
+        if result != self.__currentHandId:
+            self.__prevHandId = self.__currentHandId
+            self.__currentHandId = result
+        return result
 
     def setGameId(self):
         """virtual"""
@@ -205,12 +232,9 @@ class Game(object):
 
     def close(self):
         """log off from the server and return a Deferred"""
-        InternalParameters.autoPlay = False # do that only for the first game
-        deferred = succeed(None)
-        if self.client:
-            if self.client.perspective:
-                deferred = self.client.logout()
-            self.client = None
+        InternalParameters.demo = False # do that only for the first game
+        deferred = self.client.logout() if self.client else succeed(None)
+        self.client = None
         return deferred
 
     def removeGameFromPlayfield(self):
@@ -430,10 +454,6 @@ class Game(object):
             with Transaction():
                 Query("update game set starttime=?,seed=?,autoplay=?," \
                         "ruleset=?,p0=?,p1=?,p2=?,p3=? where id=?", args)
-                Query(["update usedruleset set lastused='%s' where id=%d" %\
-                        (starttime, self.ruleset.rulesetId),
-                    "update ruleset set lastused='%s' where hash='%s'" %\
-                        (starttime, self.ruleset.hash)])
                 if not InternalParameters.isServer:
                     Query('update server set lastruleset=? where url=?',
                           list([self.ruleset.rulesetId, self.host]))
@@ -442,15 +462,14 @@ class Game(object):
         """use a copy of ruleset for this game, reusing an existing copy"""
         self.ruleset = ruleset
         self.ruleset.load()
-        query = Query('select id from usedruleset where hash="%s"' % \
+        query = Query('select id from ruleset where id>0 and hash="%s"' % \
             self.ruleset.hash)
         if query.records:
-            # reuse that usedruleset
+            # reuse that ruleset
             self.ruleset.rulesetId = query.records[0][0]
         else:
-            # generate a new usedruleset
-            self.ruleset.rulesetId = self.ruleset.newId(used=True)
-            self.ruleset.save()
+            # generate a new ruleset
+            self.ruleset.save(copy=True, minus=False)
 
     def setHandSeed(self):
         """set seed to a reproducable value, independent of what happend
@@ -464,6 +483,9 @@ class Game(object):
     def prepareHand(self):
         """prepares the next hand"""
         del self.moves[:]
+        if self.belongsToHumanPlayer():
+            self.debug('Double riichi chance once more.')
+        self.double_riichi_chance = True
         if self.finished():
             if InternalParameters.field and isAlive(InternalParameters.field):
                 InternalParameters.field.updateGUI()
@@ -488,6 +510,31 @@ class Game(object):
             InternalParameters.field.prepareHand()
         self.setHandSeed()
 
+    def nixChances(self, nix_for=None):
+        u"""
+        Record that chances for some extra yaku are gone.
+
+        Record that the chances for blessing of earth, blessing of
+        man, double riichi or ippatsu is gone.  This should be called
+        without argument on all claims of tiles and declarations of
+        hidden kongs. At the end of the first round, when East draws
+        the first tile after the start, it should be called with
+        this game object(*), and only the double riichi and blessing-of
+        chances are gone. One round after a player declared riichi, it
+        should be called with the player object, to record that the
+        ippatsu chance is gone.
+        """
+        # (*) After all we do duck typing and call-by-object-reference,
+        # so there is no reason not to say something like
+        # “self.nixChances(self)”.
+        if not nix_for or self is nix_for:
+            if self.double_riichi_chance and self.belongsToHumanPlayer():
+                self.debug('No double riichi any more!')
+            self.double_riichi_chance = False
+        for player in self.players:
+            if not nix_for or player is nix_for:
+                player.ippatsu_chance = False
+
     def hidePopups(self):
         """hide all popup messages"""
         for player in self.players:
@@ -501,8 +548,6 @@ class Game(object):
         self.notRotated += 1
         self.roundHandCount += 1
         self.handDiscardCount = 0
-        if self.__winner and self.__winner.wind == 'E':
-            self.eastMJCount += 1
 
     def needSave(self):
         """do we need to save this game?"""
@@ -514,36 +559,43 @@ class Game(object):
             return self.shouldSave # as the server told us
 
     def __saveScores(self):
-        """save computed values to database, update score table and balance in status line"""
+        """
+        Save computed values to database.
+
+        Save computed values to database. Update score table and
+        balance in status line.
+        """
         if not self.needSave():
             return
         scoretime = datetime.datetime.now().replace(microsecond=0).isoformat()
-        with Transaction():
-            for player in self.players:
-                if player.hand:
-                    manualrules = '||'.join(x.rule.name for x in player.hand.usedRules)
-                else:
-                    manualrules = m18n('Score computed manually')
-                Query("INSERT INTO SCORE "
-                    "(game,hand,data,manualrules,player,scoretime,won,prevailing,wind,"
-                    "points,payments, balance,rotated,notrotated) "
-                    "VALUES(%d,%d,?,?,%d,'%s',%d,'%s','%s',%d,%d,%d,%d,%d)" % \
-                    (self.gameid, self.handctr, player.nameid,
-                        scoretime, int(player == self.__winner),
-                        WINDS[self.roundsFinished % 4], player.wind, player.handTotal,
-                        player.payment, player.balance, self.rotated, self.notRotated),
-                    list([player.hand.string, manualrules]))
-                if Debug.scores:
-                    self.debug('%s: roundwind=%s playerwind=%s handTotal=%s balance=%s' % (
-                        player, WINDS[self.roundsFinished % 4], player.wind,
-                        player.handTotal, player.balance))
-                for usedRule in player.hand.usedRules:
-                    rule = usedRule.rule
-                    if rule.score.limits:
-                        tag = rule.function.__class__.__name__
-                        if hasattr(rule.function, 'limitHand'):
-                            tag = rule.function.limitHand.__class__.__name__
-                        self.addCsvTag(tag)
+        for player in self.players:
+            if player.hand:
+                manualrules = '||'.join(x.rule.name for x in player.hand.usedRules)
+            else:
+                manualrules = m18n('Score computed manually')
+            Query(
+                """INSERT INTO SCORE
+(game, hand, data, manualrules, player, scoretime, won, prevailing, wind,
+ points, payments,  balance, rotated, notrotated, repeatcounter, riichibets)
+VALUES (%d, %d, ?, ?, %d, '%s', %d, '%s', '%s', %d, %d, %d, %d, %d, %d, %d)"""
+                % (self.gameid, self.handctr, player.nameid, scoretime,
+                   int(player == self.__winner),
+                   WINDS[self.roundsFinished % 4], player.wind,
+                   player.handTotal, player.payment, player.balance,
+                   self.rotated, self.notRotated, self.repeat_counter,
+                   self.riichi_bets),
+                  list([player.hand.string, manualrules]))
+            if Debug.scores:
+                self.debug('%s: handTotal=%s balance=%s %s' % (
+                    player,
+                    player.handTotal, player.balance, 'won' if player == self.winner else ''))
+            for usedRule in player.hand.usedRules:
+                rule = usedRule.rule
+                if rule.score.limits:
+                    tag = rule.function.__class__.__name__
+                    if hasattr(rule.function, 'limitHand'):
+                        tag = rule.function.limitHand.__class__.__name__
+                    self.addCsvTag(tag)
 
     def savePenalty(self, player, offense, amount):
         """save computed values to database, update score table and balance in status line"""
@@ -553,30 +605,31 @@ class Game(object):
         with Transaction():
             Query("INSERT INTO SCORE "
                 "(game,penalty,hand,data,manualrules,player,scoretime,"
-                "won,prevailing,wind,points,payments, balance,rotated,notrotated) "
-                "VALUES(%d,1,%d,?,?,%d,'%s',%d,'%s','%s',%d,%d,%d,%d,%d)" % \
+                "won,prevailing,wind,points,payments, balance,rotated,notrotated,repeat_counter,riichibets) "
+                "VALUES(%d,1,%d,?,?,%d,'%s',%d,'%s','%s',%d,%d,%d,%d,%d,%d,%d)" % \
                 (self.gameid, self.handctr, player.nameid,
-                    scoretime, int(player == self.__winner),
-                    WINDS[self.roundsFinished % 4], player.wind, 0,
-                    amount, player.balance, self.rotated, self.notRotated),
+                 scoretime, int(player == self.__winner),
+                 WINDS[self.roundsFinished % 4], player.wind, 0,
+                 amount, player.balance, self.rotated, self.notRotated,
+                 self.repeat_counter, self.riichi_bets),
                 list([player.hand.string, offense.name]))
         if InternalParameters.field:
             InternalParameters.field.updateGUI()
 
     def maybeRotateWinds(self):
-        """if needed, rotate winds, exchange seats. If finished, update database"""
-        if not self.__winner:
-            return False
-        result = self.__winner.wind != 'E' or self.eastMJCount == 9
+        """rules which make winds rotate"""
+        result = list(x for x in self.ruleset.filterFunctions('rotate') if x.rotate(self))
         if result:
+            if Debug.explain:
+                if not self.belongsToRobotPlayer():
+                    self.debug(result, prevHandId=True)
             self.rotateWinds()
-        return result
+        return bool(result)
 
     def rotateWinds(self):
         """rotate winds, exchange seats. If finished, update database"""
         self.rotated += 1
         self.notRotated = 0
-        self.eastMJCount = 0
         if self.rotated == 4:
             if not self.finished():
                 self.roundsFinished += 1
@@ -593,11 +646,13 @@ class Game(object):
             winds = winds[3:] + winds[0:3]
             for idx, newWind in enumerate(winds):
                 self.players[idx].wind = newWind
-            if self.roundsFinished % 4 and self.rotated == 0:
-                # exchange seats between rounds
+            if self.roundsFinished % 4 and self.rotated == 0 \
+                    and not self.ruleset.basicStyle == Ruleset.Japanese:
+                # Exchange seats between rounds, but not for Japanese
+                # games.
                 self.__exchangeSeats()
 
-    def debug(self, msg, btIndent=None):
+    def debug(self, msg, btIndent=None, prevHandId=False):
         """prepend game id"""
         if self.belongsToRobotPlayer():
             prefix = 'R'
@@ -608,7 +663,8 @@ class Game(object):
         else:
             logDebug(msg, btIndent=btIndent)
             return
-        logDebug('%s%s: %s' % (prefix, self.handId(), msg), withGamePrefix=False, btIndent=btIndent)
+        logDebug('%s%s: %s' % (prefix, self.__prevHandId if prevHandId else self.handId(), msg),
+            withGamePrefix=False, btIndent=btIndent)
 
     @staticmethod
     def __getNames(record):
@@ -624,29 +680,31 @@ class Game(object):
             names.append(name)
         return names
 
-    @staticmethod
-    def loadFromDB(gameid, client=None, what=None, cacheRuleset=False):
-        """load game by game id and return a new Game instance"""
+    @classmethod
+    def loadFromDB(cls, gameid, client=None):
+        """
+        Load game by game id.
+
+        Load game by game id and return a new Game instance.
+        """
         InternalParameters.logPrefix = 'S' if InternalParameters.isServer else 'C'
         qGame = Query("select p0,p1,p2,p3,ruleset,seed from game where id = %d" % gameid)
         if not qGame.records:
             return None
         rulesetId = qGame.records[0][4] or 1
-        if cacheRuleset:
-            ruleset = Ruleset.cached(rulesetId, used=True)
-        else:
-            ruleset = Ruleset(rulesetId, used=True)
+        ruleset = Ruleset.cached(rulesetId)
         Players.load() # we want to make sure we have the current definitions
-        what = what or Game
-        game = what(Game.__getNames(qGame.records[0]), ruleset, gameid=gameid,
+        game = cls(Game.__getNames(qGame.records[0]), ruleset, gameid=gameid,
                 client=client, wantedGame=qGame.records[0][5])
         qLastHand = Query("select hand,rotated from score where game=%d and hand="
             "(select max(hand) from score where game=%d)" % (gameid, gameid))
         if qLastHand.records:
             (game.handctr, game.rotated) = qLastHand.records[0]
 
-        qScores = Query("select player, wind, balance, won, prevailing from score "
-            "where game=%d and hand=%d" % (gameid, game.handctr))
+        qScores = Query(
+            """select
+player, wind, balance, won, prevailing, repeatcounter, riichibets
+from score where game=%d and hand=%d""" % (gameid, game.handctr))
         # default value. If the server saved a score entry but our client did not,
         # we get no record here. Should we try to fix this or exclude such a game from
         # the list of resumable games?
@@ -665,14 +723,9 @@ class Game(object):
             if record[3]:
                 game.winner = player
             prevailing = record[4]
+            game.repeat_counter = record[5]
+            game.riichi_bets = record[6]
         game.roundsFinished = WINDS.index(prevailing)
-        if game.handctr:
-            game.eastMJCount = int(Query("select count(1) from score "
-                "where game=%d and won=1 and wind='E' and player=%d "
-                "and prevailing='%s'" % \
-                (gameid, game.players['E'].nameid, prevailing)).records[0][0])
-        else:
-            game.eastMJCount = 0
         game.handctr += 1
         game.notRotated += 1
         game.maybeRotateWinds()
@@ -690,12 +743,16 @@ class Game(object):
         """pay the scores"""
         # pylint: disable=R0912
         # too many branches
+        if self.ruleset.basicStyle == Ruleset.Japanese:
+            # Japanese scoring is so different that it is easier to
+            # just put it in an extra method.
+            return self.__payJapaneseHand()
         winner = self.__winner
         if winner:
             winner.wonCount += 1
             guilty = winner.usedDangerousFrom
             if guilty:
-                payAction = self.ruleset.findAction('payforall')
+                payAction = self.ruleset.findUniqueOption('payforall')
             if guilty and payAction:
                 if Debug.dangerousGame:
                     self.debug('%s: winner %s. %s pays for all' % \
@@ -709,9 +766,10 @@ class Game(object):
 
         for player1 in self.players:
             if Debug.explain:
-                self.debug('%s: %s' % (player1, player1.hand.string))
-                for line in player1.hand.explain():
-                    self.debug('   %s' % (line))
+                if not self.belongsToRobotPlayer():
+                    self.debug('%s: %s' % (player1, player1.hand.string))
+                    for line in player1.hand.explain():
+                        self.debug('   %s' % (line))
             for player2 in self.players:
                 if id(player1) != id(player2):
                     if player1.wind == 'E' or player2.wind == 'E':
@@ -723,6 +781,93 @@ class Game(object):
                     if player1 != winner:
                         player1.getsPayment(-player2.handTotal * efactor)
 
+    def __payJapaneseHand(self):
+        u"""
+        Pay the points for a hand, Japanese style
+
+        Only the winner gets paid. When it was a ron (win on discard),
+        the discarder always pays. (This is similar to “dangerous
+        play” in Chinese rules, only *every* discard is treated that
+        way.) Also, the points are rounded to full hundreds.
+        """
+
+        def upToHundred(i):
+            """Return number, rounded up to the xext hundred."""
+            # We play around with // and / here. See also rule.Score,
+            # where we do the same with 10 instead of 100.
+            if i // 100 == i / 100.0:
+                # Already a multiple of 100.
+                return i
+            # Not a multiple of 100
+            return (i // 100) * 100 + 100
+
+        # TODO: handle bankrupcy.
+        # TODO: multiple winner
+        winner = self.__winner
+        # for winner in self.winners
+        if winner:
+            # TODO: Hand back riichi bet
+            winner.wonCount += 1
+            payer = self.lastDiscardBy
+            score = winner.handTotal
+            if Debug.explain:
+                if not self.belongsToRobotPlayer():
+                    self.debug('%s: %s' % (winner, winner.hand.string))
+                    for line in winner.hand.explain():
+                        self.debug('   %s' % (line))
+            # score = winner.handTotal + self.repeats * 100
+            if payer:
+                # Ron
+                if Debug.scores:
+                    self.debug('%s: winner %s. %s pays for all' % \
+                                   (self.handId(), winner, payer))
+                score = score * 6 if winner.wind == 'E' else score * 4
+                score = upToHundred(score)
+                payer.getsPayment(
+                    -score
+                     - 3 * self.repeat_counter * self.ruleset.repeatValue)
+                winner.getsPayment(
+                    score
+                    + 3 * self.repeat_counter * self.ruleset.repeatValue)
+            else:
+                # Tsumo
+                if winner.wind == 'E':
+                    score *= 2
+                for loser in self.players:
+                    if loser is winner:
+                        # Erm, not a loser after all.
+                        continue
+                    if loser.wind == 'E':
+                        loser.getsPayment(
+                            -upToHundred(2 * score))
+                        winner.getsPayment(upToHundred(2 * score))
+                    else:
+                        loser.getsPayment(-upToHundred(score))
+                        winner.getsPayment(upToHundred(score))
+                    # The repeat value is not doubled for E.
+                    loser.getsPayment(
+                        -self.repeat_counter * self.ruleset.repeatValue)
+                    winner.getsPayment(
+                        self.repeat_counter * self.ruleset.repeatValue)
+            if winner.wind == 'E':
+                self.repeat_counter += 1
+                if Debug.scores:
+                    self.debug('East win, now {} counter(s).'.format(
+                            self.repeat_counter))
+            else:
+                if Debug.scores:
+                    self.debug('Win, but not by East. Resetting counters.')
+                self.repeat_counter = 0
+        else:
+            # Here we should check for  Nagashi mangan. TODO
+            # And settle the noten penalties. TODO
+            # Or maybe settle chombo penalties. TODO
+            # if not chombo ...
+            self.repeat_counter += 1
+            if Debug.scores:
+                    self.debug('No winner, now {} counter(s)'.format(
+                        self.repeat_counter))
+
     def lastMoves(self, only=None, without=None):
         """filters and yields the moves in reversed order"""
         for idx in range(len(self.moves)-1, -1, -1):
@@ -733,26 +878,58 @@ class Game(object):
             elif without:
                 if move.message not in without:
                     yield move
+            else:
+                yield move
 
-    def throwDices(self):
-        """sets random living and kongBox
-        sets divideAt: an index for the wall break"""
+    def throwDice(self):
+        u"""
+        Determine the place where to break the wall.
+
+        Sets self.divideAt, the point where the wall is broken, based
+        on four random values in the range of 1–6, a.k.a dice throws.
+        For the instance belonging to the game server, this is also
+        where we shuffle the tiles in the wall.
+        """
         if self.belongsToGameServer():
             self.wall.tiles.sort(key=tileKey)
             self.randomGenerator.shuffle(self.wall.tiles)
-        breakWall = self.randomGenerator.randrange(4)
+        # Do it by the book. Use the first two dice to determine the
+        # wall segment to use.  Clear the dice list from the last game
+        # and add two new.
+        self.dice = [
+            self.randomGenerator.randrange(1, 7),
+            self.randomGenerator.randrange(1, 7)]
+
+        breakWall = (1 - sum(self.dice)) % 4
+        # The 1-sum is a fence post correction and takes into account
+        # that we should take this count counter-clockwise, while the
+        # wall is counted clockwise the rest of the time, incuding
+        # determining the break point in the step below.
+        # Btw, the way the break wall is determined, the chances for
+        # the break wall are E: 22.2% (8 out of 36), S: 25%, W: 27.7%
+        # (10 out of 36), N: 25%.
         sideLength = len(self.wall.tiles) // 4
-        # use the sum of four dices to find the divide
-        self.divideAt = breakWall * sideLength + \
-            sum(self.randomGenerator.randrange(1, 7) for idx in range(4))
-        if self.divideAt % 2 == 1:
-            self.divideAt -= 1
+        if self.ruleset.basicStyle != Ruleset.Japanese:
+            # Add two more throws, but not for Japanese games.
+            self.dice += [
+                self.randomGenerator.randrange(1, 7),
+                self.randomGenerator.randrange(1, 7)]
+        # Determine the break point. Count stacks of two each, not
+        # single tiles.
+        self.divideAt = breakWall * sideLength + 2 * sum(self.dice)
+        # Wrap around at the end.
         self.divideAt %= len(self.wall.tiles)
+        # print('Throws: {}, sum: {} Break wall: {}'.format(
+        #         self.dice, sum(self.dice), breakWall))
 
     def dangerousFor(self, forPlayer, tile):
         """returns a list of explaining texts if discarding tile
         would be Dangerous game for forPlayer. One text for each
         reason - there might be more than one"""
+        if self.ruleset.basicStyle == Ruleset.Japanese:
+            # Tiles are not especially dangerous for anybody from the
+            # rules perspective in Japanese games.
+            return []
         if isinstance(tile, Tile):
             tile = tile.element
         tile = tile.lower()
@@ -768,6 +945,8 @@ class Game(object):
 
     def computeDangerous(self, playerChanged=None):
         """recompute gamewide dangerous tiles. Either for playerChanged or for all players"""
+        # We compute them even for Japanese games. They can be a
+        # useful hint for the AI.
         self.dangerousTiles = list()
         if playerChanged:
             playerChanged.findDangerousTiles()
@@ -851,11 +1030,6 @@ class RemoteGame(PlayingGame):
                 if Debug.sound:
                     logDebug('myself %s gets no voice'% (myself.name))
 
-    @staticmethod
-    def loadFromDB(gameid, client=None, what=None, cacheRuleset=False):
-        """like Game.loadFromDB, but returns a RemoteGame"""
-        return Game.loadFromDB(gameid, client, RemoteGame, cacheRuleset)
-
     @apply
     def activePlayer(): # pylint: disable=E0202
         """the turn is on this player"""
@@ -887,7 +1061,7 @@ class RemoteGame(PlayingGame):
 
     def initialDeal(self):
         """Happens only on server: every player gets 13 tiles (including east)"""
-        self.throwDices()
+        self.throwDice()
         self.wall.divide()
         for player in self.players:
             player.clearHand()
@@ -919,8 +1093,21 @@ class RemoteGame(PlayingGame):
         # too many branches
         if player != self.activePlayer:
             raise Exception('Player %s discards but %s is active' % (player, self.activePlayer))
+        self.lastDiscardBy = player
+        # Keep track who discarded the tile. In Japanese style
+        # scoring, the discarder always pays for all (similar to
+        # Chinese dangerous play).
         self.discardedTiles[tileName.lower()] += 1
         player.discarded.append(tileName)
+        if player.wind == 'N':
+            # North is the last player in a round. When north has
+            # discarded, the first uninterrupted turn is surely over.
+            self.nixChances(self)
+        # Nixing the ippatsu chance for a player i a bit tricky. We
+        # have to call this the time *after* ey discards the riichi
+        # declaration tile itself. Hmm.
+        # if player.ippatsu_chance:
+        #     self.nixChances(player)
         concealedTileName = self.__concealedTileName(tileName) # has side effect, needs to be called
         if InternalParameters.field:
             if player.handBoard.focusTile and player.handBoard.focusTile.element == tileName:
