@@ -472,6 +472,8 @@ class ServerTable(Table):
                     logDebug('%s played dangerous. Discarded %s, keeping %s. %s' % \
                          (player, tile, ''.join(player.concealedTileNames), ' / '.join(txt)))
                 block.tellAll(player, Message.PlayedDangerous, tile=player.concealedTileNames)
+        # Here looks like the place to tell about riichi declacations,
+        # which is very much like on original call declaration.
         if msg.answer == Message.OriginalCall:
             block.callback(self.clientMadeOriginalCall, msg)
         else:
