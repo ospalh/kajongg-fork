@@ -111,11 +111,6 @@ class Game(object):
         self.shouldSave = shouldSave
         self.setHandSeed()
         self.activePlayer = None
-        # For Japanese play, declaring riichi in the first
-        # *uniterrupted* set of turns gives an extra yaku. A similar
-        # condition applies to Blessing of Earth and Blessing of
-        # Man. Keep track of that.
-        self.double_riichi_chance = True
         # For Japanese play, count East wins and draws.  This adds
         # points to the hand value.
         self.repeat_counter = 0
@@ -483,9 +478,6 @@ class Game(object):
     def prepareHand(self):
         """prepares the next hand"""
         del self.moves[:]
-        if self.belongsToHumanPlayer():
-            self.debug('Double riichi chance once more.')
-        self.double_riichi_chance = True
         if self.finished():
             if InternalParameters.field and isAlive(InternalParameters.field):
                 InternalParameters.field.updateGUI()
@@ -514,26 +506,31 @@ class Game(object):
         u"""
         Record that chances for some extra yaku are gone.
 
-        Record that the chances for blessing of earth, blessing of
-        man, double riichi or ippatsu is gone.  This should be called
-        without argument on all claims of tiles and declarations of
-        hidden kongs. At the end of the first round, when East draws
-        the first tile after the start, it should be called with
-        this game object(*), and only the double riichi and blessing-of
-        chances are gone. One round after a player declared riichi, it
-        should be called with the player object, to record that the
-        ippatsu chance is gone.
+        Record that the chances for Blessing of Heaven, Earth or Man,
+        double riichi, or ippatsu are gone.
+        This should be called without argument on all claims of tiles
+        and declarations of hidden kong (as that interrupts the turn),
+        and with the player as the argument to nix the chances for
+        only that player whenever ey discards a tile.
         """
-        # (*) After all we do duck typing and call-by-object-reference,
-        # so there is no reason not to say something like
-        # “self.nixChances(self)”.
-        if not nix_for or self is nix_for:
-            if self.double_riichi_chance and self.belongsToHumanPlayer():
-                self.debug('No double riichi any more!')
-            self.double_riichi_chance = False
+        # There probably needs not to be a special function to nix
+        # blessing of NN and ippatsu chances for each player. For a
+        # second i thought there should be special treatment for a
+        # robbed kong (nixing the chances) but that is pointless, as
+        # the player that has been robbed has lost anyway (and has to
+        # pay for everybody). Doing it with the discards should work.
+
+        # Also, the game-wide double riichi chance is gone. That is
+        # done per-player now, too.
         for player in self.players:
             if not nix_for or player is nix_for:
+                if self.belongsToHumanPlayer():
+                    if player.ippatsu_chance:
+                        self.debug('Nix ippatsu for [].'.format(player))
+                    if player.double_riichi_chance:
+                        self.debug('Nix double riichi for [].'.format(player))
                 player.ippatsu_chance = False
+                player.double_riichi_chance = False
 
     def hidePopups(self):
         """hide all popup messages"""
@@ -1093,21 +1090,15 @@ class RemoteGame(PlayingGame):
         # too many branches
         if player != self.activePlayer:
             raise Exception('Player %s discards but %s is active' % (player, self.activePlayer))
-        self.lastDiscardBy = player
+        # We switch on the ippatsu chance *after* the discard, so it
+        # should be safe to switch it off for every discard.
+        self.nixChances(player)
         # Keep track who discarded the tile. In Japanese style
         # scoring, the discarder always pays for all (similar to
         # Chinese dangerous play).
+        self.lastDiscardBy = player
         self.discardedTiles[tileName.lower()] += 1
         player.discarded.append(tileName)
-        if player.wind == 'N':
-            # North is the last player in a round. When north has
-            # discarded, the first uninterrupted turn is surely over.
-            self.nixChances(self)
-        # Nixing the ippatsu chance for a player i a bit tricky. We
-        # have to call this the time *after* ey discards the riichi
-        # declaration tile itself. Hmm.
-        # if player.ippatsu_chance:
-        #     self.nixChances(player)
         concealedTileName = self.__concealedTileName(tileName) # has side effect, needs to be called
         if InternalParameters.field:
             if player.handBoard.focusTile and player.handBoard.focusTile.element == tileName:
