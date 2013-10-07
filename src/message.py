@@ -579,7 +579,7 @@ class MessageTurnInterrupted(ServerMessage):
     is claimed successfully, That is, a chow or pung is revealed or a
     kong is show and not robbed.
     """
-    def clientAction(self, client, move):
+    def clientAction(self, client, move=None):
         """
         Clients nix extra yaku chances.
 
