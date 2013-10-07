@@ -122,6 +122,12 @@ class Player(object):
         self.clearHand()
         self.__lastSource = '1' # no source: blessing from heaven or earth
         self.ippatsu_chance = False  # First round after riichi-call?
+        # For Japanese play, declaring riichi in the first
+        # *uniterrupted* set of turns gives an extra yaku. The same
+        # condition applies to Blessing of Heaven, Earth, and
+        # Man. Keep track of that. We use the same variable, but
+        # double_riichi_or_blessing_of_nn_chance is too long.
+        self.double_riichi_chance = True
         self.remote = None # only for server
         self.voice = None
         self.handBoard = None
@@ -152,8 +158,8 @@ class Player(object):
         self.usedDangerousFrom = None
         self.isCalling = False
         self.ippatsu_chance = False
+        self.double_riichi_chance = True
         self.__hand = None
-        self.ippatsu_chance = False
 
     def invalidateHand(self):
         """some source for the computation of current hand changed"""
