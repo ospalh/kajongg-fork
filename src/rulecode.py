@@ -1664,17 +1664,15 @@ class BlessingOfHeaven(Function):
 
 class BlessingOfEarth(Function):
     def appliesToHand(self, hand):
-        try:
-            game = self.player.game
-        except AttributeError:
-            game = None
-        if 'no_claim' in self.options and game \
-                and not game.double_riichi_chance:
-            # The “double_riichi_chance” condition is the same as for
-            # blessing of earth, (first *uninterrupted* turn) but
-            # chance_for_double_riichi_or_blessing_of_earth is too
-            # long for a variable name.
-            return False
+        if 'no_claim' in self.options:
+            try:
+                player = self.player
+            except AttributeError:
+                return False
+            if not player.double_riichi_chance:
+                # The “double_riichi_chance” condition is the same as
+                # for Blessing of Earth, (first *uninterrupted* turn).
+                return False
         return hand.ownWind != 'e' and hand.lastSource == '1'
 
     @staticmethod
@@ -1683,6 +1681,34 @@ class BlessingOfEarth(Function):
         return (hand.ownWind != 'e'
             and hand.lastSource and hand.lastSource in 'wd'
             and not (set(hand.announcements) - set('a')))
+
+
+
+class BlessingOfMan(Function):
+    u"""
+    Win on discard in the first uninterrupted round.
+
+    Win on a discard (including robbing a kong) in the first
+    uninterrupted round. Only used in Japanese games.
+    """
+    def appliesToHand(self, hand):
+        try:
+            player = self.player
+        except AttributeError:
+            return False
+        if hand.ownWind == 'e' or not player.double_riichi_chance:
+                # The “double_riichi_chance” condition is the same as
+                # for Blessing of Man, (first *uninterrupted* turn).
+                return False
+        return hand.lastSource in 'dk'
+
+    @staticmethod
+    def selectable(hand):
+        """for scoring game"""
+        return hand.ownWind != 'e' \
+            and hand.lastSource and hand.lastSource in 'dk'
+
+
 
 class LongHand(Function):
     @staticmethod
