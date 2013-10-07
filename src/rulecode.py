@@ -1671,10 +1671,9 @@ class BlessingOfEarth(Function):
         if 'no_claim' in self.options and game \
                 and not game.double_riichi_chance:
             # The “double_riichi_chance” condition is the same as for
-            # blessing of earth or blessing of man, (first
-            # *uninterrupted* turn) but
-            # chance_for_double_riichi_or_blessing_of_earth_or_man is
-            # too long for a variable name.
+            # blessing of earth, (first *uninterrupted* turn) but
+            # chance_for_double_riichi_or_blessing_of_earth is too
+            # long for a variable name.
             return False
         return hand.ownWind != 'e' and hand.lastSource == '1'
 
