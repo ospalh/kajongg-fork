@@ -26,6 +26,23 @@ from meld import Meld, meldKey, meldsContent, Pairs, CONCEALED
 from rule import Score, Ruleset
 from common import elements, Debug
 
+# Unroll the strings for n doubles. No doubles and kazoe yakuman are
+# treated separately.
+doubles_string = {
+    1: u"One double",
+    2: u"Two doubles",
+    3: u"Three doubles",
+    4: u"Four doubles",
+    5: u"Mangan (5 doubles)",
+    6: u"Haneman (6 doubles)",
+    7: u"Haneman (7 doubles)",
+    8: u"Baiman (8 doubles)",
+    9: u"Baiman (9 doubles)",
+    10: u"Baiman (10 doubles)",
+    11: u"Sanbaiman (11 doubles)",
+    12: u"Sanbaiman (12 doubles)"}
+
+
 class UsedRule(object):
     """use this in scoring, never change class Rule.
     If the rule has been used for a meld, pass it"""
@@ -150,6 +167,13 @@ class Hand(object):
             self.sortedMeldsContent += ' ' + meldsContent(self.bonusMelds)
 
         self.usedRules = []
+        # Sort the used rules by category. Used for Japanese games.
+        self.fuRules = []  # Rules that give points/minipoints/fu
+        self.fanRules = []  # Rules that add doubles
+        self.yakuRules = []  # Rules that give doubles and can be used to win
+        self.doraRules = []  # The dora tiles
+        # It should be self.fanRules = self.yakuRules + self.doraRules.
+        self.yakumanRules = []  # The limit rules.
         self.score = None
         oldWon = self.won
         self.__applyRules()
@@ -249,22 +273,26 @@ class Hand(object):
         self.__applyMeldRules()
         self.__applyHandRules()
         if self.__hasExclusiveRules():
+            self.__sortRules()
             return
         self.score = self.__totalScore()
 
         # do the rest only if we know all tiles of the hand
         if 'Xy' in self.string:
             self.won = False    # we do not know better
+            self.__sortRules()
             return
         if self.won:
             matchingMJRules = self.__maybeMahjongg()
             if not matchingMJRules:
                 self.won = False
                 self.score = self.__totalScore()
+                self.__sortRules()
                 return
             self.mjRule = matchingMJRules[0]
             self.usedRules.append(UsedRule(self.mjRule))
             if self.__hasExclusiveRules():
+                self.__sortRules()
                 return
             self.usedRules.extend(self.matchingWinnerRules())
             self.score = self.__totalScore()
@@ -274,6 +302,48 @@ class Hand(object):
             if loserRules:
                 self.usedRules.extend(list(UsedRule(x) for x in loserRules))
                 self.score = self.__totalScore()
+        self.__sortRules()
+
+    def __sortRules(self):
+        u"""
+        Sort the used rules
+
+        Go through the used rules and put them in lists by category,
+        lists thatgive points, or doubles or limits. The doubles rules
+        are further split by yaku and dora rules.
+        """
+        self.fuRules = []  # Rules that give points/minipoints/fu
+        self.fanRules = []  # Rules that add doubles
+        self.yakuRules = []  # Rules that give doubles and can be used to win
+        self.doraRules = []  # The dora tiles
+        # It should be self.fanRules = self.yakuRules + self.doraRules.
+        self.yakumanRules = []  # The limit rules.
+        for used_rule in self.usedRules:
+            rule = used_rule.rule
+            if rule.score.points:
+                self.fuRules.append(used_rule)
+            if rule.score.doubles:
+                self.fanRules.append(used_rule)
+                # TODO: Test whether its a yaku or dora rule
+                # if rule.isyakurule:
+                if True:
+                    self.yakuRules.append(used_rule)
+                else:
+                    self.doraRules.append(used_rule)
+            if rule.score.limits:
+                self.yakumanRules.append(used_rule)
+        # Now sort the lists themselves, by values.
+        self.fuRules.sort(
+            key=lambda urule: urule.rule.score.points, reverse=True)
+        self.fanRules.sort(
+            key=lambda urule: urule.rule.score.doubles, reverse=True)
+        self.yakuRules.sort(
+            key=lambda urule: urule.rule.score.doubles, reverse=True)
+        self.doraRules.sort(
+            key=lambda urule: urule.rule.score.doubles, reverse=True)
+        self.yakumanRules.sort(
+            key=lambda urule: urule.rule.score.limits, reverse=True)
+
 
     def matchingWinnerRules(self):
         """returns a list of matching winner rules"""
@@ -731,7 +801,15 @@ class Hand(object):
                 self.declaredMelds.append(meld)
 
     def explain(self):
-        """explain what rules were used for this hand"""
+        """
+        Explain what rules were used for this hand.
+
+        For Chinese games, this simply sums up the point rules, the
+        double roules and other (limits) rules. For Japanese, it is
+        more complicated.
+        """
+        if self.ruleset.basicStyle == Ruleset.Japanese:
+            return self.explainJapanese()
         result = [x.rule.explain() for x in self.usedRules
             if x.rule.score.points]
         result.extend([x.rule.explain() for x in self.usedRules
@@ -741,6 +819,61 @@ class Hand(object):
         if any(x.rule.debug for x in self.usedRules):
             result.append(str(self))
         return result
+
+    def explainJapanese(self):
+        u"""
+        Explain the used rules for a Japanese hand.
+
+        This lists only the relevant parts of the used rules, sorted
+        by fu/points/minipoints, fan and limits.
+        """
+        result = []
+        if self.yakumanRules:
+            if self.ruleset.double_yakuman:
+                limits = sum(
+                    urule.rule.score.limits for urule in self.yakumanRules)
+                rule_count = len(self.yakumanRules)
+            else:
+                limits = self.yakumanRules[0].rule.score.limits
+                rule_count = 1
+            if limits > 2:
+                result.append(u'{}-fold yakuman'.format(limits))
+            elif limits == 2:
+                result.append(u'Double yakuman'.format(limits))
+            for ymr in range(rule_count):
+                # Here we list either the first or all yakuman rules.
+                result.append(self.yakumanRules[ymr].rule.expplain())
+            # No point in bothering with the other rules for yakuman.
+            return result
+        doubles = sum(urule.rule.score.doubles for urule in self.fanRules)
+        if doubles < 1:
+            result.append(u'No doubles')
+        else:
+            try:
+                result.append(doubles_string[doubles])
+            except KeyError:
+                result.append(u'Kazoe-yakuman ({} doubles)'.format(doubles))
+
+            yaku = sum(urule.rule.score.doubles for urule in self.yakuRules)
+            if yaku > 0:
+                result.append(u'{} yaku,'.format(yaku))
+                result.extend(x.rule.explain() for x in self.yakuRules)
+            dora = sum(urule.rule.score.doubles for urule in self.doraRules)
+            if dora > 0:
+                result.append(u'{} dora,'.format(dora))
+                result.extend(x.rule.explain() for x in self.doraRules)
+        if doubles >= 5:
+            # Sort-of half-limit hand. No point in listing the fu.
+            return result
+        points = sum(urule.rule.score.points for urule in self.fuRules)
+        if (points > 30 and doubles == 4) or (points > 60 and doubles == 3):
+            result.append('{} points (limit)'.format(points))
+        else:
+            result.append('{} points'.format(points))
+        if self.fuRules:
+            result.extend(x.rule.explain() for x in self.fuRules)
+        return result
+
 
     def doublesEstimate(self):
         """this is only an estimate because it only uses meldRules and handRules,
