@@ -125,8 +125,10 @@ class Player(object):
         # For Japanese play, declaring riichi in the first
         # *uniterrupted* set of turns gives an extra yaku. The same
         # condition applies to Blessing of Heaven, Earth, and
-        # Man. Keep track of that. We use the same variable, but
-        # double_riichi_or_blessing_of_nn_chance is too long.
+        # Man. Keep track of that. We use one variable, but
+        # double_riichi_or_blessing_of_nn_chance is too long.  This is
+        # similar to, but not identical to checks for
+        # self.__lastSource == '1'.
         self.double_riichi_chance = True
         self.remote = None # only for server
         self.voice = None
