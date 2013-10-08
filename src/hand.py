@@ -257,6 +257,63 @@ class Hand(object):
             self.mjStr = self.mjStr.replace(' M', ' m')
         return property(**locals())
 
+    @property
+    def yakuman(self):
+        u"""
+        The number of limits.
+
+        Return the number of yakuman scored. It might also work for
+        Chinese games..
+        """
+        if not self.yakumanRules:
+            return 0
+        try:
+            do_dym = self.ruleset.double_yakuman
+        except AttributeError:
+            # double_yakuman is not set for Chinese games. (i think).
+            do_dym = True
+        if do_dym:
+            # sum([]) == 0, what is what we want for non-limit hands.
+            return sum(urule.rule.score.limits for urule in self.yakumanRules)
+        else:
+            return self.yakumanRules[0].rule.score.limits
+
+    @property
+    def fan(self):
+        u"""
+        The number of fan (doubles).
+
+        This does not take into acount limits.
+        """
+        return sum(urule.rule.score.doubles for urule in self.fanRules)
+
+    @property
+    def yaku(self):
+        u"""
+        The number of yaku (doubles for the hand).
+
+        This does not take into acount limits.
+        """
+        return sum(urule.rule.score.doubles for urule in self.yakuRules)
+
+    @property
+    def dora(self):
+        u"""
+        The number of dora (doubles for special tiles).
+
+        This does not take into acount limits.
+        """
+        return sum(urule.rule.score.doubles for urule in self.doraRules)
+
+    @property
+    def fu(self):
+        u"""
+        The number of fu (points/minipoints).
+
+        This does not take into acount doubles &c.
+        """
+        return sum(urule.rule.score.points for urule in self.fuRules)
+
     def debug(self, msg, btIndent=None):
         """try to use Game.debug so we get a nice prefix"""
         if self.player:
@@ -684,6 +741,9 @@ class Hand(object):
             score = usedRule.rule.score
             if score.limits:
                 # we assume that a hand never gets different limits combined
+                # N.B. that is *not* true for original/Japanese (as
+                # oposed to European/EMP) Riichi. But in that case we
+                # don't use this bit anyway.
                 maxLimit = max(maxLimit, score.limits)
                 maxRule = usedRule
             else:
@@ -828,48 +888,52 @@ class Hand(object):
         by fu/points/minipoints, fan and limits.
         """
         result = []
-        if self.yakumanRules:
-            if self.ruleset.double_yakuman:
-                limits = sum(
-                    urule.rule.score.limits for urule in self.yakumanRules)
-                rule_count = len(self.yakumanRules)
+        if self.yakuman:
+            rule_count = len(self.yakumanRules)
+            try:
+                if not self.ruleset.double_yakuman:
+                    rule_count = max(rule_count, 1)
+                    # When rule_count is 0 here, self.yakuman should be
+                    # 0 as well, and we should not be in this branch
+                    # at all.
+                    assert(rule_count == 1)
+            except AttributeError:
+                # double_yakuman not set. Do not limit the listing of
+                # limit rules.
+                pass
+            if self.yakuman > 2:
+                result.append(u'{}-fold yakuman'.format(self.yakuman))
+            elif self.yakuman == 2:
+                result.append(u'Double yakuman')
             else:
-                limits = self.yakumanRules[0].rule.score.limits
-                rule_count = 1
-            if limits > 2:
-                result.append(u'{}-fold yakuman'.format(limits))
-            elif limits == 2:
-                result.append(u'Double yakuman'.format(limits))
+                result.append(u'Yakuman')
             for ymr in range(rule_count):
                 # Here we list either the first or all yakuman rules.
-                result.append(self.yakumanRules[ymr].rule.expplain())
-            # No point in bothering with the other rules for yakuman.
+                result.append(self.yakumanRules[ymr].rule.explain())
+            # No point in bothering with fan or fu when we have yakuman.
             return result
-        doubles = sum(urule.rule.score.doubles for urule in self.fanRules)
-        if doubles < 1:
+        if self.fan < 1:
             result.append(u'No doubles')
         else:
             try:
-                result.append(doubles_string[doubles])
+                result.append(doubles_string[self.fan])
             except KeyError:
-                result.append(u'Kazoe-yakuman ({} doubles)'.format(doubles))
-
-            yaku = sum(urule.rule.score.doubles for urule in self.yakuRules)
-            if yaku > 0:
-                result.append(u'{} yaku,'.format(yaku))
+                result.append(
+                    u'Kazoe-yakuman ({} doubles)'.format(self.fan))
+            if self.yaku > 0:
+                result.append(u'{} yaku,'.format(self.yaku))
                 result.extend(x.rule.explain() for x in self.yakuRules)
-            dora = sum(urule.rule.score.doubles for urule in self.doraRules)
-            if dora > 0:
-                result.append(u'{} dora,'.format(dora))
+            if self.dora > 0:
+                result.append(u'{} dora,'.format(self.dora))
                 result.extend(x.rule.explain() for x in self.doraRules)
-        if doubles >= 5:
+        if self.fan >= 5:
             # Sort-of half-limit hand. No point in listing the fu.
             return result
-        points = sum(urule.rule.score.points for urule in self.fuRules)
-        if (points > 30 and doubles == 4) or (points > 60 and doubles == 3):
-            result.append('{} points (limit)'.format(points))
+        if (self.fu > 30 and self.fan == 4) \
+                or (self.fu > 60 and self.fan == 3):
+            result.append('{} points (limit)'.format(self.fu))
         else:
-            result.append('{} points'.format(points))
+            result.append('{} points'.format(self.fu))
         if self.fuRules:
             result.extend(x.rule.explain() for x in self.fuRules)
         return result
