@@ -403,18 +403,13 @@ Mahjong on the discard after the last tile in the wall. (Houtei)''')))
                     'East mahjong on initial fourteen tiles (Tenho)')))
         self.winnerRules.add(Rule(
                 'Blessing of Earth',
-                'FBlessingOfEarth||Olastsource=1||Ono_claim',
-                # I don’t know whether the lastsource has any effect,
-                # but riichi rules require that nobody has made any
-                # claim (including concealed kongs).
-                limits=1, description=m18n(
+                'FBlessingOfEarth||Olastsource=1||Ono_claim', limits=1,
+                description=m18n(
                     'Mahjong on selfdraw in the first round (Chiho)')))
-        # Japanese Blessing of Earth may need to get its own rule, to
-        # make sure nobody has called anything.
-        # self.winnerRules.add(Rule(
-        #        'Blessing of Man', 'FBlessingOfMan||Olastsource=1||Ono_claim',
-        #        limits=1, description=m18n(
-        #             'Mahjong on discard in the first round (Renho)')))
+        self.winnerRules.add(Rule(
+                'Blessing of Man', 'FBlessingOfMan', limits=1,
+                description=m18n(
+                    'Mahjong on discard in the first round (Renho)')))
 
     def addPenaltyRules(self):
         """Set penalty rules"""

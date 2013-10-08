@@ -421,7 +421,6 @@ class ServerTable(Table):
         """the active player gets a tile from the dead end. Tell all clients."""
         requests = self.prioritize(requests)
         if requests and requests[0].answer == Message.MahJongg:
-            print('robbed kong')
             requests[0].answer.serverAction(self, requests[0])
         else:
             # Like exposing a chow or pung, *successfully* exposing a

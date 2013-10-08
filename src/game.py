@@ -513,22 +513,8 @@ class Game(object):
         and with the player as the argument to nix the chances for
         only that player whenever ey discards a tile.
         """
-        # There probably needs not to be a special function to nix
-        # blessing of NN and ippatsu chances for each player. For a
-        # second i thought there should be special treatment for a
-        # robbed kong (nixing the chances) but that is pointless, as
-        # the player that has been robbed has lost anyway (and has to
-        # pay for everybody). Doing it with the discards should work.
-
-        # Also, the game-wide double riichi chance is gone. That is
-        # done per-player now, too.
         for player in self.players:
             if not nix_for or player is nix_for:
-                if self.belongsToHumanPlayer():
-                    if player.ippatsu_chance:
-                        self.debug('Nix ippatsu for [].'.format(player))
-                    if player.double_riichi_chance:
-                        self.debug('Nix double riichi for [].'.format(player))
                 player.ippatsu_chance = False
                 player.double_riichi_chance = False
 
