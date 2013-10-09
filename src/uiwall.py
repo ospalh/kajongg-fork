@@ -246,13 +246,13 @@ class UIWall(Wall):
         u"""
         Move the tiles in the kong box.
 
-        Move the tiles in the kong box (dead wall), either by 1.5
+        Move the tiles in the kong box (dead wall), either by 2.5
         tiles in line
         """
         # Tiles could also be moved 0.5 tiles outwards.
         for tile in self.kongBox:
             # self._moveDividedTile(tile, 0, y_offset=0.5, level=None)
-            self._moveDividedTile(tile, -1.5, y_offset=0, level=None)
+            self._moveDividedTile(tile, -2.5, y_offset=0, level=None)
 
     def _moveDividedTile(self, tile, offset, y_offset=0, level=2):
         """moves a tile from the divide hole to its new place"""
