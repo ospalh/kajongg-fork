@@ -94,9 +94,9 @@ class UIWall(Wall):
             side.message.setVisible(False)
             side.message.setPos(side.center())
         self.__sides[0].setPos(yWidth=sideLength)
-        self.__sides[3].setPos()
-        self.__sides[2].setPos(xWidth=sideLength)
-        self.__sides[1].setPos(xWidth=sideLength, yWidth=sideLength)
+        self.__sides[3].setPos(xHeight=1)
+        self.__sides[2].setPos(xHeight=1, xWidth=sideLength, yHeight=1)
+        self.__sides[1].setPos(xWidth=sideLength, yWidth=sideLength, yHeight=1 )
         self.showShadows = Preferences.showShadows
         InternalParameters.field.centralScene.addItem(self.__square)
 
