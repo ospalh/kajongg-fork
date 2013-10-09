@@ -162,18 +162,6 @@ class GraphicsTileItem(QGraphicsItem):
                 renderer.render(painter, self.tileset.svgName[self.tile.element.lower()],
                     self.boundingRect())
         painter.restore()
-        game = InternalParameters.field.game
-        if game:
-            kongBox = game.wall.kongBox
-            if kongBox and self.tile in kongBox:
-                painter.save()
-                faceSize = self.tileset.faceSize
-                width = faceSize.width()
-                height = faceSize.height()
-                painter.translate(self.facePos())
-                painter.drawLine(QPointF(0.0, 0.0), QPointF(width, height))
-                painter.drawLine(QPointF(width, 0.0), QPointF(0.0, height))
-                painter.restore()
 
     def pixmapFromSvg(self, pmapSize=None, withBorders=None):
         """returns a pixmap with default size as given in SVG and optional borders/shadows"""

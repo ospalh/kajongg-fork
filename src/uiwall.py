@@ -241,7 +241,19 @@ class UIWall(Wall):
         for idx, side in enumerate(self.__sides):
             side.level = (levels[side.lightSource][idx] + 1) * ZValues.boardLevelFactor
 
-    def _moveDividedTile(self, tile, offset):
+    def _moveKongBox(self):
+        u"""
+        Move the tiles in the kong box.
+
+        Move the tiles in the kong box (dead wall), either by 1.5
+        tiles in line
+        """
+        # Tiles could also be moved 0.5 tiles outwards.
+        for tile in self.kongBox:
+            # self._moveDividedTile(tile, 0, y_offset=0.5, level=None)
+            self._moveDividedTile(tile, -1.5, y_offset=0, level=None)
+
+    def _moveDividedTile(self, tile, offset, y_offset=0, level=2):
         """moves a tile from the divide hole to its new place"""
         board = tile.board
         newOffset = tile.xoffset + offset
@@ -249,7 +261,13 @@ class UIWall(Wall):
         if newOffset >= sideLength:
             sideIdx = self.__sides.index(tile.board)
             board = self.__sides[(sideIdx+1) % 4]
-        tile.setBoard(board, newOffset % sideLength, 0, level=2)
+        if newOffset < 0:
+            # Move around the other corner
+            sideIdx = self.__sides.index(tile.board)
+            board = self.__sides[(sideIdx-1) % 4]
+        tile.setBoard(
+            board, newOffset % sideLength, tile.yoffset + y_offset,
+            level=level)
 
     def placeLooseTiles(self):
         """place the last 2 tiles on top of kong box"""
@@ -275,6 +293,7 @@ class UIWall(Wall):
                 # might not be there anymore. This gets rid
                 # of the cross on them.
                 tile.graphics.update()
+            self._moveKongBox()
             # move last two tiles onto the dead end:
             return animate().addCallback(self.__placeLooseTiles2)
 
