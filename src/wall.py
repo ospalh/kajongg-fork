@@ -50,7 +50,8 @@ class Wall(object):
                 raise WallEmpty
             tiles = self.kongBox[-count:]
             self.kongBox = self.kongBox[:-count]
-            if len(self.kongBox) % 2 == 0:
+            if len(self.kongBox) % 2 == 0 \
+                    and self.game.ruleset != Ruleset.Japanese:
                 self.placeLooseTiles()
         else:
             if len(self.living) < count:
