@@ -896,7 +896,7 @@ class Hand(object):
                     # When rule_count is 0 here, self.yakuman should be
                     # 0 as well, and we should not be in this branch
                     # at all.
-                    assert(rule_count == 1)
+                    assert rule_count == 1
             except AttributeError:
                 # double_yakuman not set. Do not limit the listing of
                 # limit rules.
