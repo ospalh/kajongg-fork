@@ -35,7 +35,6 @@ def fill_order(game):
         offset = 0
     order = [0, 3, 2, 1, 0, 3, 2]
     for i in range(4):
-        # print('filling board {}'.format(order[i + offset]))
         yield order[i + offset]
 
 
@@ -262,13 +261,14 @@ class UIWall(Wall):
         if newOffset >= sideLength:
             sideIdx = self.__sides.index(tile.board)
             board = self.__sides[(sideIdx+1) % 4]
-        if newOffset < 0:
+            newOffset %= sideLength
+        if newOffset < 1:
             # Move around the other corner
             sideIdx = self.__sides.index(tile.board)
             board = self.__sides[(sideIdx-1) % 4]
+            newOffset = (newOffset - 1) % sideLength + 1
         tile.setBoard(
-            board, newOffset % sideLength, tile.yoffset + y_offset,
-            level=level)
+            board, newOffset, tile.yoffset + y_offset, level=level)
 
     def placeLooseTiles(self):
         """place the last 2 tiles on top of kong box"""
