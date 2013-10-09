@@ -42,7 +42,13 @@ def fill_order(game):
 class UIWallSide(Board):
     """a Board representing a wall of tiles"""
     def __init__(self, tileset, boardRotation, length):
-        Board.__init__(self, length, 1, tileset, boardRotation=boardRotation)
+        width = 1.5
+        if InternalParameters.field.game \
+                and InternalParameters.field.game.ruleset.basicStyle \
+                == Ruleset.Japanese:
+            width = 1
+        Board.__init__(
+            self, length, width, tileset, boardRotation=boardRotation)
         self.length = length
 
     # pylint: disable=R0201
@@ -74,6 +80,7 @@ class UIWall(Wall):
         # we use only white dragons for building the wall. We could actually
         # use any tile because the face is never shown anyway.
         game.wall = self
+        self.game = game
         Wall.__init__(self, game)
         self.__square = Board(1, 1, InternalParameters.field.tileset)
         self.__square.setZValue(ZValues.marker)
@@ -254,10 +261,13 @@ class UIWall(Wall):
         Move the tiles in the kong box (dead wall), either by 2.5
         tiles in line
         """
-        # Tiles could also be moved 0.5 tiles outwards.
+        x_off = 0
+        y_off = 0.5
+        if self.game.ruleset.basicStyle == Ruleset.Japanese:
+            x_off = -1
+            y_off = 0
         for tile in self.kongBox:
-            # self._moveDividedTile(tile, 0, y_offset=0.5, level=None)
-            self._moveDividedTile(tile, -1, y_offset=0, level=None)
+            self._moveDividedTile(tile, x_off, y_offset=y_off, level=None)
 
     def _moveDividedTile(self, tile, offset, y_offset=0, level=2):
         """moves a tile from the divide hole to its new place"""

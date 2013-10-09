@@ -115,9 +115,10 @@ class HandBoard(Board):
             # pylint: disable=W0212
             if self._showShadows is None or self._showShadows != value:
                 if value:
-                    self.setPos(yHeight= 1.5)
+                    # self.setPos(yHeight= 1.5)
+                    self.setPos(yHeight= 2)
                 else:
-                    self.setPos(yHeight= 1.0)
+                    self.setPos(yHeight= 1.5)
                 if value:
                     self.lowerY = 1.2
                 else:
