@@ -24,6 +24,7 @@ from PyQt4.QtGui import QGraphicsSimpleTextItem
 
 from board import PlayerWind, YellowText, Board, rotateCenter
 from game import Wall
+from rule import Ruleset
 from animation import animate, afterCurrentAnimationDo, Animated, \
     ParallelAnimationGroup
 
@@ -277,11 +278,15 @@ class UIWall(Wall):
     def __placeLooseTiles2(self, dummyResult):
         """place the last 2 tiles on top of kong box, no animation is active"""
         placeCount = len(self.kongBox) // 2
-        if placeCount >= 4:
-            first = min(placeCount-1, 5)
-            second = max(first-2, 1)
-            self._moveDividedTile(self.kongBox[-1], second)
-            self._moveDividedTile(self.kongBox[-2], first)
+        if self.game.ruleset.basicStyle != Ruleset.Japanese:
+            if placeCount >= 4:
+                first = min(placeCount-1, 5)
+                second = max(first-2, 1)
+                self._moveDividedTile(self.kongBox[-1], second)
+                self._moveDividedTile(self.kongBox[-2], first)
+        else:
+            self._moveDividedTile(self.kongBox[-1], -1, level=0)
+
 
     def divide(self):
         """divides a wall, building a living and and a dead end"""
