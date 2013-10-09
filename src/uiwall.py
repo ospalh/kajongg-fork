@@ -93,10 +93,15 @@ class UIWall(Wall):
             side.message.setZValue(ZValues.popup)
             side.message.setVisible(False)
             side.message.setPos(side.center())
+        corner_offset = 1
+        if game.ruleset.basicStyle == Ruleset.Japanese:
+            corner_offset = 0
         self.__sides[0].setPos(yWidth=sideLength)
-        self.__sides[3].setPos(xHeight=1)
-        self.__sides[2].setPos(xHeight=1, xWidth=sideLength, yHeight=1)
-        self.__sides[1].setPos(xWidth=sideLength, yWidth=sideLength, yHeight=1 )
+        self.__sides[3].setPos(xHeight=corner_offset)
+        self.__sides[2].setPos(
+            xHeight=corner_offset, xWidth=sideLength, yHeight=corner_offset)
+        self.__sides[1].setPos(
+            xWidth=sideLength, yWidth=sideLength, yHeight=corner_offset)
         self.showShadows = Preferences.showShadows
         InternalParameters.field.centralScene.addItem(self.__square)
 
