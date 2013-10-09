@@ -19,7 +19,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
 from common import elements
+from rule import Ruleset
 from tile import Tile
+
 
 class WallEmpty(Exception):
     """exception when trying to get a tile off the empty wall"""
