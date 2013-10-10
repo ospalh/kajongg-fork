@@ -48,13 +48,20 @@ class Wall(object):
             tileNames = [None]
         count = len(tileNames)
         if deadEnd:
+            replenish = self.game.ruleset.replenish_dead_wall  # short-hand
             if len(self.kongBox) < count:
+                # Do the check even if replenish: logically we first
+                # give out the tiles and then replenish. That does not
+                # work when the dead wall is empty.
+                raise WallEmpty
+            if replenish and len(self.living) < count:
                 raise WallEmpty
             tiles = self.kongBox[-count:]
             self.kongBox = self.kongBox[:-count]
             if len(self.kongBox) % 2 == 0 \
                     and self.game.ruleset != Ruleset.Japanese:
                 self.placeLooseTiles()
+            self.replenishDeadWall(len(tileNames))
         else:
             if len(self.living) < count:
                 raise WallEmpty
@@ -64,6 +71,27 @@ class Wall(object):
             if name is not None:
                 tile.element = name
         return tiles
+
+    def replenishDeadWall(self, count):
+        u"""
+        Replenish the dead wall.
+
+        Move count tiles from the living wall to the dead wall.
+        """
+        assert len(self.living) >= count
+        for dum in range(count):
+            # replenishDeadWall usually gets called with count == 1 anyway.
+            self._moveTileToDeadWall()
+        #
+        # self.deadWall += self.living[:count] + self.deadWall
+        # self.living = self.living[count:]
+
+    def _moveTileToDeadWall(self):
+        u"""
+        Move a single tile from the living to the dead wall.
+        """
+        self.kongBox = [self.living[-1],] + self.kongBox
+        self.living = self.living[:-1]
 
     def build(self):
         """virtual: build visible wall"""

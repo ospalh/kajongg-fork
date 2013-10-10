@@ -43,9 +43,9 @@ class UIWallSide(Board):
     """a Board representing a wall of tiles"""
     def __init__(self, tileset, boardRotation, length):
         width = 1.5
-        if InternalParameters.field.game \
-                and InternalParameters.field.game.ruleset.basicStyle \
-                == Ruleset.Japanese:
+        game = InternalParameters.field.game
+        if game and (game.ruleset.basicStyle == Ruleset.Japanese
+                     or game.ruleset.replenish_dead_wall):
             width = 1
         Board.__init__(
             self, length, width, tileset, boardRotation=boardRotation)
@@ -258,16 +258,64 @@ class UIWall(Wall):
         u"""
         Move the tiles in the kong box.
 
-        Move the tiles in the kong box (dead wall), either by 2.5
-        tiles in line
+        Move the tiles in the kong box (dead wall), either 0.5 tiles
+        outward or by 1 tiles in line.
         """
         x_off = 0
         y_off = 0.5
-        if self.game.ruleset.basicStyle == Ruleset.Japanese:
+        if self.game.ruleset.basicStyle == Ruleset.Japanese \
+                or self.game.ruleset.replenish_dead_wall:
             x_off = -1
             y_off = 0
         for tile in self.kongBox:
             self._moveDividedTile(tile, x_off, y_offset=y_off, level=None)
+        # testing. Looks like we can check the second stone’s level to
+        # decide what to do with the first (Move up one level or not.)
+        print(
+            u'tile 1 (second) of the kong box is at level {}'.format(
+                self.kongBox[1].level))
+        self._moveDividedTile(self.living[-1], 0, y_offset=-1, level=None)
+        self._moveDividedTile(self.kongBox[1], 0, y_offset=1, level=None)
+
+    def _moveTileToDeadWall(self):
+        u"""
+        Move a single tile from the living to the dead wall.
+        """
+        moved_tile = self.living[-1]
+        self.kongBox = [moved_tile,] + self.kongBox
+        self.living = self.living[:-1]
+        # Then the graphical bit.
+        try:
+            lift_kongbox_tile = (self.kongBox[2].level == 0)
+            # self.kongBox[0] now is the tile to be moved. This and
+            # self.kongBox[1] should always be directly on the
+            # table. The next one is above self.kongBox[1] or in the
+            # next stack over and on the table, too.
+        except IndexError:
+            # No self.kongBox[2]. Shouldn’t happen in a typical game.
+            lift_kongbox_tile = True
+        # Slide the tile into the gap.
+        self._moveDividedTile(moved_tile, -1, level=0)
+        try:
+            # Move the next-to-last tile of the living wall down to the
+            # table. (It may already be there.)
+            self._moveDividedTile(self.living[-1], 0, level=0)
+        except IndexError:
+            # Or it may not be there at all.
+            pass
+        if lift_kongbox_tile:
+            print('lifting kong box tile')
+            try:
+                # Move up the old last kongbox tile
+                self._moveDividedTile(self.kongBox[1], 0, level=1)
+            except IndexError:
+                # If it is there
+                pass
+            # Then slide the moved tile underneath.
+            self._moveDividedTile(moved_tile, -1, level=0)
+
+
+
 
     def _moveDividedTile(self, tile, offset, y_offset=0, level=2):
         """moves a tile from the divide hole to its new place"""
