@@ -112,6 +112,9 @@ class ClassicalChinese(PredefinedRuleset):
         self.parameterRules.add(Rule('must declare calling hand',
                 'boolmustDeclareCallingHand||Omandatory', parameter=False,
                 description=m18n('Mah Jongg is only allowed after having declared to have a calling hand')))
+        self.parameterRules.add(Rule('Replenish dead wall',
+                'boolreplenish_dead_wall||Omandatory', parameter=False,
+                description=m18n('Move the last tile of the live wall to the dead wall on a kong.')))
         # Two rules that are used for Japanese style games.
         self.parameterRules.add(Rule(
                 'Chinese game', 'intbasicStyle||Ointernal||Omandatory',
@@ -774,6 +777,11 @@ The number of points added for each draw or East win.''')))
                 'Double yakuman', 'booldouble_yakuman',  parameter=False,
                 description=m18n(u'''\
 Allow double yakuman. (Big four winds always counts as double yakuman)''')))
+        self.parameterRules.add(Rule(
+                'Replenish dead wall', 'boolreplenish_dead_wall||Omandatory',
+                parameter=True, description=m18n(u'''\
+Move the last tile of the live wall to the dead wall on a kong.''')))
+
 
 
 class JapaneseJapaneseStyleRuleset(JapaneseStyleRuleset):

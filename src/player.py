@@ -718,6 +718,11 @@ class Player(object):
     def possibleKongs(self):
         """returns a unique list of lists with possible kong combinations"""
         kongs = []
+        if self.game.ruleset.replenish_dead_wall and not self.game.wall.living:
+            # When we replenish the dead wall, no kong is possible
+            # when the living wall is empty, as there is no tile to
+            # put over into the dead wall.
+            return kongs
         if self == self.game.activePlayer:
             # declaring a kong
             for tileName in set([x for x in self.__concealedTileNames if x[0] not in 'fy']):
