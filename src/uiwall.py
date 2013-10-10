@@ -274,8 +274,8 @@ class UIWall(Wall):
         print(
             u'tile 1 (second) of the kong box is at level {}'.format(
                 self.kongBox[1].level))
-        self._moveDividedTile(self.living[-1], 0, y_offset=-1, level=None)
-        self._moveDividedTile(self.kongBox[1], 0, y_offset=1, level=None)
+        self._moveDividedTile(self.living[-1], 0, y_offset=-0.25, level=None)
+        self._moveDividedTile(self.kongBox[1], 0, y_offset=0.25, level=None)
 
     def _moveTileToDeadWall(self):
         u"""
