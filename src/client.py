@@ -456,12 +456,24 @@ class Client(pb.Referenceable):
     def __maySayChow(self):
         """returns answer arguments for the server if calling chow is possible.
         returns the meld to be completed"""
+        if self.game.ruleset.basicStyle == Ruleset.Japanese \
+                and not self.game.wall.living:
+            # From the riichi rules: “The last tile in the wall can
+            # only be claimed for a win, not for a kong, pung or
+            # chow.”
+            return None
         if self.game.myself == self.game.nextPlayer():
             return self.game.myself.possibleChows()
 
     def __maySayPung(self):
         """returns answer arguments for the server if calling pung is possible.
         returns the meld to be completed"""
+        if self.game.ruleset.basicStyle == Ruleset.Japanese \
+                and not self.game.wall.living:
+            # From the riichi rules: “The last tile in the wall can
+            # only be claimed for a win, not for a kong, pung or
+            # chow.”
+            return None
         if self.game.lastDiscard:
             element = self.game.lastDiscard.element
             assert element[0].isupper(), str(self.game.lastDiscard)
@@ -471,6 +483,14 @@ class Client(pb.Referenceable):
     def __maySayKong(self):
         """returns answer arguments for the server if calling or declaring kong is possible.
         returns the meld to be completed or to be declared"""
+        if (self.game.ruleset.replenish_dead_wall \
+                or self.game.ruleset.basicStyle == Ruleset.Japanese) \
+                and not self.game.wall.living:
+            # When we replenish the dead wall, no kong is possible
+            # when the living wall is empty, as there is no tile to
+            # put over into the dead wall. It is also explicitly
+            # forbidden in the riichi rules.
+            return None
         return self.game.myself.possibleKongs()
 
     def __maySayMahjongg(self, move):
