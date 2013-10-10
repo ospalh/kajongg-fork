@@ -645,7 +645,7 @@ Hand composed entirely of honour tiles. (Tsuu iisou)''')))
         self.winnerRules.add(Rule(
                 'Little four winds', 'FLittleFourJoys', limits=1,
                 description=m18n(u'''\
-Hand with three pungs/kongs of winds and a pair of . (Shou suushi)''')))
+Hand with three pungs/kongs of winds and a pair of winds. (Shou suushi)''')))
         self.winnerRules.add(Rule(
                 'Big four winds', 'FBigFourJoys', limits=2, limits_limit=2,
                 description=m18n(u'''\
