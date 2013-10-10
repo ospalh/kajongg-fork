@@ -271,9 +271,6 @@ class UIWall(Wall):
             self._moveDividedTile(tile, x_off, y_offset=y_off, level=None)
         # testing. Looks like we can check the second stone’s level to
         # decide what to do with the first (Move up one level or not.)
-        print(
-            u'tile 1 (second) of the kong box is at level {}'.format(
-                self.kongBox[1].level))
         self._moveDividedTile(self.living[-1], 0, y_offset=-0.25, level=None)
         self._moveDividedTile(self.kongBox[1], 0, y_offset=0.25, level=None)
 
