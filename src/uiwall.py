@@ -294,28 +294,26 @@ class UIWall(Wall):
         except IndexError:
             # No self.kongBox[2]. Shouldn’t happen in a typical game.
             lift_kongbox_tile = True
-        # Slide the tile into the gap.
-        self._moveDividedTile(moved_tile, -1, level=0)
-        try:
-            # Move the next-to-last tile of the living wall down to the
-            # table. (It may already be there.)
-            self._moveDividedTile(self.living[-1], 0, level=0)
-        except IndexError:
-            # Or it may not be there at all.
-            pass
+
         if lift_kongbox_tile:
-            print('lifting kong box tile')
             try:
-                # Move up the old last kongbox tile
+                # Lift the old last kongbox tile
                 self._moveDividedTile(self.kongBox[1], 0, level=1)
             except IndexError:
                 # If it is there
                 pass
-            # Then slide the moved tile underneath.
+            # Now slide the moving tile underneath.
             self._moveDividedTile(moved_tile, -1, level=0)
-
-
-
+        else:
+            # First slide the tile into the gap.
+            self._moveDividedTile(moved_tile, -1, level=0)
+            try:
+                # Move the next-to-last tile of the living wall down to the
+                # table. (It *should* not already be be there.)
+                self._moveDividedTile(self.living[-1], 0, level=0)
+            except IndexError:
+                # Or it may not be there at all.
+                pass
 
     def _moveDividedTile(self, tile, offset, y_offset=0, level=2):
         """moves a tile from the divide hole to its new place"""
