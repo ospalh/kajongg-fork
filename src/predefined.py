@@ -666,7 +666,8 @@ Not allowed for concealed pinfu.''')))
 Last tile completes the middle of a chow, e.g. having 4 and 6 on the hand and \
 drawing or claiming a 5. Not allowed for concealed pinfu''')))
         self.winnerRules.add(Rule(
-                'Tsumo', 'FSelfDraw', points=2, description=m18n(u'''\
+                'Tsumo', 'FSelfDraw||Opoints', points=2,
+                description=m18n(u'''\
 Self-drawn last tile. Not applied for concealed pinfu.''')))
 
         # Points for the hand.

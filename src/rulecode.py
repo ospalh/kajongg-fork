@@ -214,10 +214,19 @@ class OpenPinfu(Function):
 
 
 class SelfDraw(Function):
-    @staticmethod
-    def appliesToHand(hand):
-        if not hand.lastSource or ConcealedPinfu.appliesToHand(hand) \
-                or SevenPairs.appliesToHand(hand):
+    u"""
+    Tsumo.
+
+    Returns True when the hand was won on self-draw. Without options
+    returns True for every self-draw. With points set, returns True
+    when the 2 points for tsumo should be awarded. (That is, not when
+    no other poits are added, by other hands’ rules.)
+    """
+    def appliesToHand(self, hand):
+        if not hand.lastSource:
+            return False
+        if self.options['points'] and (ConcealedPinfu.appliesToHand(hand)
+                                       or SevenPairs.appliesToHand(hand)):
             return False
         return not (hand.lastSource in 'dkZ')
 
