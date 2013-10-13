@@ -595,7 +595,7 @@ class ServerTable(Table):
         if not self.game.wall.living and \
                 (self.game.ruleset.basicStyle == Ruleset.Japanese
                  or (self.game.ruleset.replenish_dead_wall
-                     and meld.meldType == KONG))
+                     and meld.meldType == KONG)):
             # From the riichi rules: “The last tile in the wall can
             # only be claimed for a win, not for a kong, pung or
             # chow.” When the dead wall is replenished, calling a kong
