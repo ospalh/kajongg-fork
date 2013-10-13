@@ -27,7 +27,7 @@ from twisted.internet.task import deferLater
 from twisted.internet.defer import Deferred, succeed, DeferredList
 from twisted.python.failure import Failure
 from util import logDebug, logException, logWarning, Duration, m18nc
-from message import Message
+from message import Message, MessageMahJongg
 from common import InternalParameters, Debug
 from rule import Ruleset
 from meld import meldsContent
@@ -535,7 +535,7 @@ class Client(pb.Referenceable):
             self.sayable[Message.Chow] = self.__maySayChow()
         if Message.Kong in answers:
             self.sayable[Message.Kong] = self.__maySayKong()
-        if Message.MahJongg in answers:
+        if any(isinstance(mmj, MessageMahJongg) for mmj in answers):
             self.sayable[Message.MahJongg] = self.__maySayMahjongg(move)
         if Message.OriginalCall in answers:
             self.sayable[Message.OriginalCall] = self.__maySayOriginalCall()
