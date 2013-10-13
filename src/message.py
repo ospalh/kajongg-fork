@@ -224,6 +224,33 @@ class MessageMahJongg(NotifyAtOnceMessage, ServerMessage):
         return move.player.declaredMahJongg(move.source, move.withDiscard,
             move.lastTile, move.lastMeld)
 
+
+class MessageRon(MessageMahJongg):
+    u"""
+    Somebody said ron and wins.
+
+    For Japanese mahjong, to win on a discard, the player must say
+    “mahjong” or “ron”.
+    """
+    def __init__(self):
+        NotifyAtOnceMessage.__init__(
+            self, name=m18ncE('kajongg','Ron'),
+            shortcut=m18ncE('kajongg game dialog:Key for ron', 'R'))
+
+
+class MessageTsumo(MessageMahJongg):
+    u"""
+    Somebody said tsumo and wins.
+
+    For Japanese mahjong, to win on self draw, the player must say
+    “mahjong” or “tsumo”.
+    """
+    def __init__(self):
+        NotifyAtOnceMessage.__init__(
+            self, name=m18ncE('kajongg','Tsumo'),
+            shortcut=m18ncE('kajongg game dialog:Key for tsumo', 'T'))
+
+
 class MessageOriginalCall(NotifyAtOnceMessage, ServerMessage):
     """somebody made an original call"""
     def __init__(self):
