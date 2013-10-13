@@ -50,6 +50,7 @@ from wall import WallEmpty
 from client import Client, Table
 from query import Transaction, Query, DBHandle, initDb
 from predefined import loadPredefinedRulesets
+from rule import Ruleset
 from meld import Meld, PAIR, PUNG, KONG, CHOW
 from util import m18n, m18nE, m18ncE, logDebug, logWarning, SERVERMARK, \
     Duration, socketName, logError
@@ -520,7 +521,7 @@ class ServerTable(Table):
         Deal with the hand being over,
 
         Show the concealed tiles of all players (Chinese style) or of
-        those that have to (Japanese stile) to all players. Also do
+        those that have to (Japanese style) to all players. Also do
         the scoring by calling saveHand
         """
         if not self.running:
@@ -590,6 +591,20 @@ class ServerTable(Table):
         if not player.hasConcealedTiles(hasTiles):
             msg = m18nE('%1 wrongly said %2: claims to have concealed tiles %3 but only has %4')
             self.abort(msg, player.name, claim.name, ' '.join(hasTiles), ''.join(player.concealedTileNames))
+            return
+        if not self.game.wall.living and \
+                (self.game.ruleset.basicStyle == Ruleset.Japanese
+                 or (self.game.ruleset.replenish_dead_wall
+                     and meld.meldType == KONG))
+            # From the riichi rules: “The last tile in the wall can
+            # only be claimed for a win, not for a kong, pung or
+            # chow.” When the dead wall is replenished, calling a kong
+            # is impossible on the last tile, as there is no tile left
+            # to shift over. Make sure we don’t fall for a rogue
+            # client.
+            msg = m18nE('%1 tried to claim %2 on last tile.') + 'x:' \
+                + str(meld.meldType) + meld.joined
+            self.abort(msg, player.name, claim.name)
             return
         # update our internal state before we listen to the clients again
         self.game.discardedTiles[claimedTile.lower()] -= 1
