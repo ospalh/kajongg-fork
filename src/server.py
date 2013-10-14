@@ -54,7 +54,7 @@ from rule import Ruleset
 from meld import Meld, PAIR, PUNG, KONG, CHOW
 from util import m18n, m18nE, m18ncE, logDebug, logWarning, SERVERMARK, \
     Duration, socketName, logError
-from message import Message, ChatMessage
+from message import ChatMessage, Message, MessageMahJongg
 from common import elements, Debug
 from sound import Voice
 from deferredutil import DeferredBlock
@@ -419,9 +419,14 @@ class ServerTable(Table):
             block.callback(self.moved)
 
     def pickKongReplacement(self, requests=None):
-        """the active player gets a tile from the dead end. Tell all clients."""
+        """
+        The active player gets a tile from the dead end.
+
+        The active player gets a tile from the dead end. Tell all
+        clients.
+        """
         requests = self.prioritize(requests)
-        if requests and requests[0].answer == Message.MahJongg:
+        if requests and isinstance(requests[0].answer, MessageMahJongg):
             requests[0].answer.serverAction(self, requests[0])
         else:
             # Like exposing a chow or pung, *successfully* exposing a
@@ -655,7 +660,12 @@ class ServerTable(Table):
         self.tellAll(player, Message.DeclaredKong, self.pickKongReplacement, source=meldTiles)
 
     def claimMahJongg(self, msg):
-        """a player claims mah jongg. Check this and if correct, tell all."""
+        """
+        A player claims mah jongg.
+
+        A player claims mah jongg. Check this and if correct, tell
+        all.
+        """
         if not self.running:
             return
         player = msg.player
@@ -673,8 +683,9 @@ class ServerTable(Table):
         lastMeld = Meld(lastMeld)
         msgArgs = player.showConcealedMelds(concealedMelds, withDiscard)
         if msgArgs:
-            self.abort(*msgArgs) # pylint: disable=W0142
-        player.declaredMahJongg(concealedMelds, withDiscard, player.lastTile, lastMeld)
+            self.abort(*msgArgs)  # pylint: disable=W0142
+        player.declaredMahJongg(
+            concealedMelds, withDiscard, player.lastTile, lastMeld)
         if not player.hand.won:
             msg = m18nE('%1 claiming MahJongg: This is not a winning hand: %2')
             self.abort(msg, player.name, player.hand.string)
@@ -689,9 +700,20 @@ class ServerTable(Table):
             if Debug.dangerousGame:
                 logDebug('%s wins with dangerous tile %s from %s' % \
                              (player, self.game.lastDiscard, discardingPlayer))
-            block.tellAll(player, Message.UsedDangerousFrom, source=discardingPlayer.name)
-        block.tellAll(player, Message.MahJongg, source=concealedMelds, lastTile=player.lastTile,
-                     lastMeld=list(lastMeld.pairs), withDiscard=withDiscard)
+            block.tellAll(
+                player, Message.UsedDangerousFrom,
+                source=discardingPlayer.name)
+        # Use the right message here.
+        if self.game.ruleset.basicStyle != Ruleset.Japanese:
+            mmessage = Message.MahJongg
+        else:
+            if withDiscard or robbedTheKong:
+                mmessage = Message.Ron
+            else:
+                mmessage = Message.Tsumo
+        block.tellAll(
+            player, mmessage, source=concealedMelds, lastTile=player.lastTile,
+            lastMeld=list(lastMeld.pairs), withDiscard=withDiscard)
         block.callback(self.endHand)
 
     def dealt(self, dummyResults):
