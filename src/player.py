@@ -742,6 +742,11 @@ class Player(object):
         if withDiscard:
             self.lastTile = withDiscard
             self.lastMeld = lastMeld
+            # TODO: Looks like there is a problem with upper- and
+            # lower case of the last tile when there are multiple
+            # winnners. I got:
+            #
+            # C: Error for player ospalh: withDiscard: Db lastDiscard: db
             assert withDiscard == self.game.lastDiscard.element, 'withDiscard: %s lastDiscard: %s' % (
                 withDiscard, self.game.lastDiscard.element)
             self.addConcealedTiles(self.game.lastDiscard)
