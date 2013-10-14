@@ -57,7 +57,7 @@ from util import m18n, m18nE, m18ncE, logDebug, logWarning, SERVERMARK, \
 from message import ChatMessage, Message, MessageMahJongg
 from common import elements, Debug
 from sound import Voice
-from deferredutil import DeferredBlock
+from deferredutil import DeferredBlock, Request
 
 def srvMessage(*args):
     """concatenate all args needed for m18n encoded in one string.
@@ -732,22 +732,53 @@ class ServerTable(Table):
         """returns only requests we want to execute"""
         if not self.running:
             return
-        answers = [x for x in requests if x.answer not in [Message.NoClaim, Message.OK, None]]
-        if len(answers) > 1:
-            claims = [Message.MahJongg, Message.Kong, Message.Pung, Message.Chow]
-            for claim in claims:
-                if claim in [x.answer for x in answers]:
-                    # ignore claims with lower priority:
-                    answers = [x for x in answers if x.answer == claim or x.answer not in claims]
-                    break
-        mjAnswers = [x for x in answers if x.answer == Message.MahJongg]
-        if len(mjAnswers) > 1:
-            mjPlayers = [x.player for x in mjAnswers]
-            nextPlayer = self.game.nextPlayer()
-            while nextPlayer not in mjPlayers:
-                nextPlayer = self.game.nextPlayer(nextPlayer)
-            answers = [x for x in answers if x.player == nextPlayer or x.answer != Message.MahJongg]
-        return answers
+        # There are three types of requests, characterized by Request.answer:
+        # Priority 0: NoClaim or OK. Should be dropped.
+
+        # Priority 1: Other info, like riichi declarations. (I think.)
+        #    Should be kept.
+        # Priority > 1: Of these, those with the highest priority
+        #     (i.e. 2 for chows, 3 for pung/kong or 4 for win) should
+        #     be kept.
+        # There should be at most one chow claim and (at least for
+        # non-American games) one pung/kong claim. In this function we
+        # look the other way if this is not true. There may be more
+        # than one claim for a win (on discard). What happens then
+        # depends ons on the basic style. We should pick the right one
+        # for Chinese games and give back all for Japanese games.
+        try:
+            highest_priority = max(ans.priority for ans in answers)
+        # except (TypeError, ValueError):
+        except (TypeError, ):
+            print('No claim, TypeError')
+            # max() throws TypeError, max([]) throws ValueError.
+            return  # None
+        except (ValueError, ):
+            print('No claim, ValueError')
+            # max() throws TypeError, max([]) throws ValueError.
+            return  # None
+        other_requests = [
+            rqst for rqst in requests if rqst.answer.priority == 1]
+        if highest_priority > 1:
+            top_requests = [
+                rqst for rqst in requests
+                if rqst.answer.priority == highest_priority]
+        else:
+            top_requests = []
+        if highest_priority == 4 \
+                and self.game.ruleset.basicStyle != Ruleset.Japanese \
+                and len(top_requests) > 1:
+            # Now pick the winner of Chinese games
+            # (The len(top_requests) test is an optimization. The code
+            # in this block should work with one winner.)
+            candidates = [x.player for x in top_requests]
+            winner = self.game.nextPlayer()
+            while winner not in candidates:
+                winner = self.game.nextPlayer(winner)
+            top_requests = [
+                rqst for rqst in top_requests if rqst.player == winner]
+            assert len(top_requests) == 1
+        return top_requests + other_requests
 
     def askForClaims(self, dummyRequests):
         """ask all players if they want to claim"""
