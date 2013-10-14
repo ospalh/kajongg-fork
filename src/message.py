@@ -606,18 +606,6 @@ class MessageNoClaim(NotifyAtOnceMessage, ServerMessage):
         """returns text and warning flag for button and text for tile for button and text for tile"""
         return m18n('You cannot or do not want to claim this tile'), False, ''
 
-def __scanSelf():
-    """for every message defined in this module which can actually be used for traffic,
-    generate a class variable Message.msg where msg is the name (without spaces)
-    of the message. Example: 'Message.NoClaim'.
-    Those will be used as stateless constants. Also add them to dict Message.defined."""
-    if not Message.defined:
-        for glob in globals().values():
-            if hasattr(glob, "__mro__"):
-                if glob.__mro__[-2] == Message and len(glob.__mro__) > 2:
-                    if glob.__name__.startswith('Message'):
-                        msg = glob()
-                        type.__setattr__(Message, msg.name.replace(' ', ''), msg)
 
 class MessageTurnInterrupted(ServerMessage):
     u"""
@@ -632,9 +620,25 @@ class MessageTurnInterrupted(ServerMessage):
         Clients nix extra yaku chances.
 
         Clients should note that double richi, blessing of NN and
-        ippatsu chances are over.
+        ippatsu chances are over and players are no longer temporay
+        furiten.
         """
         return client.game.nixChances()
+
+
+def __scanSelf():
+    """for every message defined in this module which can actually be used for traffic,
+    generate a class variable Message.msg where msg is the name (without spaces)
+    of the message. Example: 'Message.NoClaim'.
+    Those will be used as stateless constants. Also add them to dict Message.defined."""
+    if not Message.defined:
+        for glob in globals().values():
+            if hasattr(glob, "__mro__"):
+                if glob.__mro__[-2] == Message and len(glob.__mro__) > 2:
+                    if glob.__name__.startswith('Message'):
+                        msg = glob()
+                        type.__setattr__(Message, msg.name.replace(' ', ''), msg)
+
 
 class ChatMessage:
     """holds relevant info about a chat message"""
