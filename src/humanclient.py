@@ -920,9 +920,9 @@ class HumanClient(Client):
             myself.handBoard.setEnabled(False)
             return answer, myself.handBoard.focusTile.element
         args = self.sayable[answer]
-        if answer == Message.Chow:
+        if answer is Message.Chow:
             return self.selectChow(args)
-        if answer == Message.Kong:
+        if answer is Message.Kong:
             return self.selectKong(args)
         assert args
         self.game.hidePopups()

@@ -303,14 +303,15 @@ class Client(pb.Referenceable):
             delay += delayStep
             for move in self.game.lastMoves():
                 # latest move first
-                if move.message == Message.Discard:
+                if move.message is Message.Discard:
                     break
-                elif move.message == Message.PopupMsg and move.msg == 'No Claim':
+                elif move.message is Message.PopupMsg \
+                        and move.msg == 'No Claim':
                     noClaimCount += 1
                     if noClaimCount == 2:
                         # everybody said "I am not interested", so we claim chow now
                         return result
-                elif move.message == Message.PopupMsg and move.msg in ('Pung', 'Kong'):
+                elif move.message is Message.PopupMsg and move.msg in ('Pung', 'Kong'):
                     # somebody said Pung or Kong, so we suppress our Chow
                     return
             if delay < self.game.ruleset.claimTimeout * 0.95:
@@ -319,7 +320,7 @@ class Client(pb.Referenceable):
             return result
         self.computeSayable(move, answers)
         result = self.intelligence.selectAnswer(answers)
-        if result[0] == Message.Chow:
+        if result[0] is Message.Chow:
             # wait to see if somebody says Pung or Kong
             return deferLater(reactor, delayStep, delayed, result, delay)
         return succeed(result)
@@ -376,7 +377,7 @@ class Client(pb.Referenceable):
 # robot players calls Pung. See https://bugs.kde.org/show_bug.cgi?id=318981
 #            if self.isHumanClient() and game.nextPlayer() == game.myself:
 #                # I am next
-#                if move.message == Message.PopupMsg and move.kwargs['msg'] == 'Pung':
+#                if move.message is Message.PopupMsg and move.kwargs['msg'] == 'Pung':
 #                    # somebody said pung
 #                    if move.player != game.myself:
 #                        # it was not me
@@ -386,12 +387,12 @@ class Client(pb.Referenceable):
 #                                # I may say Chow
 #                                print('FOUND EXAMPLE IN:', game.handId(withMoveCount=True))
 
-        if move.message == Message.Discard:
+        if move.message is Message.Discard:
             # do not block here, we want to get the clientDialog
             # before the animated tile reaches its end position
             animate()
             return answer
-        elif move.message == Message.AskForClaims:
+        elif move.message is Message.AskForClaims:
             # no need to start an animation. If we did the below standard clause, this is what
             # could happen:
             # 1. user says Chow
@@ -446,7 +447,7 @@ class Client(pb.Referenceable):
         By declaring we mean exposing a meld, using only tiles from the hand.
         For now we only support Kong: in Classical Chinese it makes no sense
         to declare a Pung."""
-        assert move.message == Message.Kong
+        assert move.message is Message.Kong
         if not self.thatWasMe(move.player) and not self.game.playOpen:
             move.player.showConcealedTiles(move.source)
         move.exposedMeld = move.player.exposeMeld(move.source)
@@ -498,16 +499,16 @@ class Client(pb.Referenceable):
         game = self.game
         myself = game.myself
         robbableTile = withDiscard = None
-        if move.message == Message.DeclaredKong:
+        if move.message is Message.DeclaredKong:
             withDiscard = move.source[0].capitalize()
             if move.player != myself:
                 robbableTile = move.exposedMeld.pairs[1] # we want it capitalized for a hidden Kong
-        elif move.message == Message.AskForClaims:
+        elif move.message is Message.AskForClaims:
             withDiscard = game.lastDiscard.element
         hand = myself.computeHand(withTile=withDiscard, robbedTile=robbableTile, asWinner=True)
         if hand.won:
             if Debug.robbingKong:
-                if move.message == Message.DeclaredKong:
+                if move.message is Message.DeclaredKong:
                     game.debug('%s may rob the kong from %s/%s' % \
                        (myself, move.player, move.exposedMeld.joined))
             if Debug.mahJongg:

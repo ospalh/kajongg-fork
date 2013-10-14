@@ -41,6 +41,7 @@ class Message(object):
         self.name = name or self.__class__.__name__.replace('Message', '')
         self.i18nName = self.name
         self.shortcut = shortcut
+        print('message with priority {}'.format(priority))
         self.priority = priority
         # It is easier to sort low-first, but plain language is *high*
         # priority for things that should be at the front.
@@ -69,8 +70,10 @@ class Message(object):
 
         Use the priority for comparison. (This means that “a == b”
         (same priority) is quite different from “a is b” (same
-        massage).)
+        massage).) “if a < b:” means “if a has *higher* priority than
+        b.”
         """
+        print('sort messages')
         return -self.priority.__cmp__(-other.priority)
 
 class ServerMessage(Message):

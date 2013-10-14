@@ -286,7 +286,7 @@ class ServerTable(Table):
     def collectGameIdAnswers(self, requests, gameid):
         """clients answered if the proposed game id is free"""
         for msg in requests:
-            if msg.answer == Message.NO:
+            if msg.answer is Message.NO:
                 self.proposeGameId(gameid + 1)
                 return
         self.game.gameid = gameid
@@ -307,7 +307,7 @@ class ServerTable(Table):
         """if all players said ready, start the game"""
         mayStart = True
         for msg in requests:
-            if msg.answer == Message.NO or len(requests) < 4:
+            if msg.answer is Message.NO or len(requests) < 4:
                 # this player answered "I am not ready", exclude her from table
                 # a player might already have logged of from the table. So if we
                 # are not 4 anymore, all players must leave the table
@@ -360,7 +360,7 @@ class ServerTable(Table):
         block = DeferredBlock(self)
         voiceDataRequests = []
         for request in requests:
-            if request.answer == Message.ClientWantsVoiceData:
+            if request.answer is Message.ClientWantsVoiceData:
                 # another human player requests sounds for voiceId
                 voiceId = request.args[0]
                 voiceFor = [x for x in self.game.players if isinstance(x.remote, User) \
@@ -479,7 +479,7 @@ class ServerTable(Table):
                 block.tellAll(player, Message.PlayedDangerous, tile=player.concealedTileNames)
         # Here looks like the place to tell about riichi declacations,
         # which is very much like on original call declaration.
-        if msg.answer == Message.OriginalCall:
+        if msg.answer is Message.OriginalCall:
             block.callback(self.clientMadeOriginalCall, msg)
         else:
             block.callback(self.askForClaims)
@@ -630,7 +630,7 @@ class ServerTable(Table):
                          (player, lastDiscard, discardingPlayer))
             block.tellAll(player, Message.UsedDangerousFrom, source=discardingPlayer.name)
         block.tellAll(player, nextMessage, source=meldTiles)
-        if claim == Message.Kong:
+        if claim is Message.Kong:
             block.callback(self.pickKongReplacement)
         else:
             # If we *successfully* expose a meld, that nixes chances
@@ -675,7 +675,7 @@ class ServerTable(Table):
                 self.game.handId(), player, concealedMelds, withDiscard, lastMeld)
         discardingPlayer = self.game.activePlayer
         lastMove = self.game.lastMoves(without=[Message.PopupMsg]).next()
-        robbedTheKong = lastMove.message == Message.DeclaredKong
+        robbedTheKong = lastMove.message is Message.DeclaredKong
         if robbedTheKong:
             player.lastSource = 'k'
             withDiscard = lastMove.source[0].capitalize()
@@ -731,6 +731,7 @@ class ServerTable(Table):
     def prioritize(self, requests):
         """returns only requests we want to execute"""
         if not self.running:
+            print ('not runnincg')
             return
         # There are three types of requests, characterized by Request.answer:
         # Priority 0: NoClaim or OK. Should be dropped.

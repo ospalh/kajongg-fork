@@ -238,11 +238,11 @@ class AIDefault:
                 parameter = self.selectDiscard(hand)
             elif tryAnswer in [Message.Pung, Message.Chow, Message.Kong] and self.respectOriginalCall():
                 continue
-            elif tryAnswer == Message.Pung and self.client.maybeDangerous(tryAnswer):
+            elif tryAnswer is Message.Pung and self.client.maybeDangerous(tryAnswer):
                 continue
-            elif tryAnswer == Message.Chow:
+            elif tryAnswer is Message.Chow:
                 parameter = self.selectChow(parameter)
-            elif tryAnswer == Message.Kong:
+            elif tryAnswer is Message.Kong:
                 parameter = self.selectKong(parameter)
             if parameter:
                 answer = tryAnswer
