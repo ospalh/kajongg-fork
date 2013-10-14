@@ -36,11 +36,23 @@ class Message(object):
 
     defined = {}
 
-    def __init__(self, name=None, shortcut=None):
+    def __init__(self, name=None, shortcut=None, priority=1):
         """those are the english values"""
         self.name = name or self.__class__.__name__.replace('Message', '')
         self.i18nName = self.name
         self.shortcut = shortcut
+        self.minus_priority = -priority
+        # It is easier to sort low-first, but plain language is *high*
+        # priority for things that should be at the front.
+        # Priority defaults to 1.
+        # Priorities:
+        # 0: no claim.
+        # 1: general stuff that conveys some meaning (original call,
+        #    got kong replacement, ...)
+        # 2: chows
+        # 3: pung or kong
+        # 4: wins (mahjong/ron/tsumo)
+
         # do not use a numerical value because that could easier
         # change with software updates
         Message.defined[self.name] = self
@@ -63,8 +75,8 @@ class ServerMessage(Message):
 
 class ClientMessage(Message):
     """those classes are used for messages from client to server"""
-    def __init__(self, name=None, shortcut=None):
-        Message.__init__(self, name, shortcut)
+    def __init__(self, name=None, shortcut=None, priority=1):
+        Message.__init__(self, name, shortcut, priority)
         self.i18nName = m18nc('kajongg', self.name)
         self.notifyAtOnce = False
 
@@ -94,14 +106,15 @@ class ClientMessage(Message):
 class NotifyAtOnceMessage(ClientMessage):
     """those classes are for messages that should pop up at the
     other clients right away"""
-    def __init__(self, name, shortcut=None):
-        ClientMessage.__init__(self, name, shortcut)
+    def __init__(self, name, shortcut=None, priority=1):
+        ClientMessage.__init__(self, name, shortcut, priority)
         self.notifyAtOnce = True
 
 class PungChowMessage(NotifyAtOnceMessage):
     """common code for Pung and Chow"""
-    def __init__(self, name=None, shortcut=None):
-        NotifyAtOnceMessage.__init__(self, name=name, shortcut=shortcut)
+    def __init__(self, name=None, shortcut=None, priority=2):
+        NotifyAtOnceMessage.__init__(
+            self, name=name, shortcut=shortcut, priority=priority)
 
     def toolTip(self, button, dummyTile):
         """decorate the action button which will send this message"""
@@ -137,9 +150,10 @@ class PungChowMessage(NotifyAtOnceMessage):
 class MessagePung(PungChowMessage, ServerMessage):
     """somebody said pung and gets the tile"""
     def __init__(self):
-        PungChowMessage.__init__(self,
-            name=m18ncE('kajongg','Pung'),
-            shortcut=m18ncE('kajongg game dialog:Key for Pung', 'P'))
+        PungChowMessage.__init__(
+            self, name=m18ncE('kajongg','Pung'),
+            shortcut=m18ncE('kajongg game dialog:Key for Pung', 'P'),
+            priority=3)
     def serverAction(self, table, msg):
         """the server mirrors that and tells all others"""
         table.claimTile(msg.player, self, msg.args[0], Message.Pung)
@@ -150,9 +164,10 @@ class MessagePung(PungChowMessage, ServerMessage):
 class MessageKong(NotifyAtOnceMessage, ServerMessage):
     """somebody said kong and gets the tile"""
     def __init__(self):
-        NotifyAtOnceMessage.__init__(self,
-            name=m18ncE('kajongg','Kong'),
-            shortcut=m18ncE('kajongg game dialog:Key for Kong', 'K'))
+        NotifyAtOnceMessage.__init__(
+            self, name=m18ncE('kajongg','Kong'),
+            shortcut=m18ncE('kajongg game dialog:Key for Kong', 'K'),
+            priority=3)
     def serverAction(self, table, msg):
         """the server mirrors that and tells all others"""
         if table.game.lastDiscard:
@@ -185,9 +200,10 @@ class MessageKong(NotifyAtOnceMessage, ServerMessage):
 class MessageChow(PungChowMessage, ServerMessage):
     """somebody said chow and gets the tile"""
     def __init__(self):
-        PungChowMessage.__init__(self,
-            name=m18ncE('kajongg','Chow'),
-            shortcut=m18ncE('kajongg game dialog:Key for Chow', 'C'))
+        PungChowMessage.__init__(
+            self, name=m18ncE('kajongg','Chow'),
+            shortcut=m18ncE('kajongg game dialog:Key for Chow', 'C'),
+            priority=2)
     def serverAction(self, table, msg):
         """the server mirrors that and tells all others"""
         if table.game.nextPlayer() != msg.player:
@@ -210,9 +226,10 @@ class MessageMahJongg(NotifyAtOnceMessage, ServerMessage):
     """somebody sayd mah jongg and wins"""
     sendScore = True
     def __init__(self):
-        NotifyAtOnceMessage.__init__(self,
-            name=m18ncE('kajongg','Mah Jongg'),
-            shortcut=m18ncE('kajongg game dialog:Key for Mah Jongg', 'M'))
+        NotifyAtOnceMessage.__init__(
+            self, name=m18ncE('kajongg','Mah Jongg'),
+            shortcut=m18ncE('kajongg game dialog:Key for Mah Jongg', 'M'),
+            priority=4)
     def serverAction(self, table, msg):
         """the server mirrors that and tells all others"""
         table.claimMahJongg(msg)
@@ -235,7 +252,8 @@ class MessageRon(MessageMahJongg):
     def __init__(self):
         NotifyAtOnceMessage.__init__(
             self, name=m18ncE('kajongg','Ron'),
-            shortcut=m18ncE('kajongg game dialog:Key for ron', 'R'))
+            shortcut=m18ncE('kajongg game dialog:Key for ron', 'R'),
+            priority=4)
 
 
 class MessageTsumo(MessageMahJongg):
@@ -248,7 +266,8 @@ class MessageTsumo(MessageMahJongg):
     def __init__(self):
         NotifyAtOnceMessage.__init__(
             self, name=m18ncE('kajongg','Tsumo'),
-            shortcut=m18ncE('kajongg game dialog:Key for tsumo', 'T'))
+            shortcut=m18ncE('kajongg game dialog:Key for tsumo', 'T'),
+            priority=4)
 
 
 class MessageOriginalCall(NotifyAtOnceMessage, ServerMessage):
@@ -568,9 +587,10 @@ class MessageNO(ClientMessage):
 class MessageOK(ClientMessage):
     """a client says OK"""
     def __init__(self):
-        ClientMessage.__init__(self,
-            name=m18ncE('kajongg','OK'),
-            shortcut=m18ncE('kajongg game dialog:Key for OK', 'O'))
+        ClientMessage.__init__(
+            self, name=m18ncE('kajongg','OK'),
+            shortcut=m18ncE('kajongg game dialog:Key for OK', 'O'),
+            priority=0)
     def toolTip(self, dummyButton, dummyTile):
         """returns text and warning flag for button and text for tile for button and text for tile"""
         return m18n('Confirm that you saw the message'), False, ''
@@ -578,9 +598,10 @@ class MessageOK(ClientMessage):
 class MessageNoClaim(NotifyAtOnceMessage, ServerMessage):
     """A player explicitly says he will not claim a tile"""
     def __init__(self):
-        NotifyAtOnceMessage.__init__(self,
-            name=m18ncE('kajongg','No Claim'),
-            shortcut=m18ncE('kajongg game dialog:Key for No claim', 'N'))
+        NotifyAtOnceMessage.__init__(
+            self, name=m18ncE('kajongg','No Claim'),
+            shortcut=m18ncE('kajongg game dialog:Key for No claim', 'N'),
+            priority=0)
     def toolTip(self, dummyButton, dummyTile):
         """returns text and warning flag for button and text for tile for button and text for tile"""
         return m18n('You cannot or do not want to claim this tile'), False, ''
