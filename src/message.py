@@ -41,7 +41,7 @@ class Message(object):
         self.name = name or self.__class__.__name__.replace('Message', '')
         self.i18nName = self.name
         self.shortcut = shortcut
-        self.minus_priority = -priority
+        self.priority = priority
         # It is easier to sort low-first, but plain language is *high*
         # priority for things that should be at the front.
         # Priority defaults to 1.
@@ -62,6 +62,16 @@ class Message(object):
 
     def __repr__(self):
         return "<Message: %s>" % self
+
+    def __cmp__(self, other):
+        u"""
+        Use the priority for comparison.
+
+        Use the priority for comparison. (This means that “a == b”
+        (same priority) is quite different from “a is b” (same
+        massage).)
+        """
+        return -self.priority.__cmp__(-other.priority)
 
 class ServerMessage(Message):
     """those classes are used for messages from server to client"""
