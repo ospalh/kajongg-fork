@@ -731,16 +731,13 @@ class ServerTable(Table):
     def prioritize(self, requests):
         """returns only requests we want to execute"""
         if not self.running:
-            print ('not runnincg')
             return
         # There are three types of requests, characterized by Request.answer:
         # No anwswer: Should be dropped
         # Priority 0: NoClaim or OK. Should be dropped.
-
         # Priority 1: Other info, usually discards, but may include
         #    things like riichi declarations. (I think.)  Should be
         #    kept.
-
         # Priority > 1: Of these, those with the highest priority
         #     (i.e. 2 for chows, 3 for pung/kong or 4 for win) should
         #     be kept.
@@ -750,8 +747,6 @@ class ServerTable(Table):
         # than one claim for a win (on discard). What happens then
         # depends ons on the basic style. We should pick the right one
         # for Chinese games and give back all for Japanese games.
-        print('rqsts: {}'.format(requests))
-        print('priorities: {}'.format([rqst.answer.priority for rqst in requests if rqst.answer]))
         try:
             highest_priority = max(
                 rqst.answer.priority for rqst in requests if rqst.answer)
@@ -761,10 +756,8 @@ class ServerTable(Table):
             # max() throws TypeError, max([]) throws ValueError.
             return  # None
         except (ValueError, ):
-            print('No claims with answer, ValueError')
-            # max() throws TypeError, max([]) throws ValueError.
+            # No claims left. Typical case when nobody wants a tile.
             return  # None
-        print ('highest_priority: {}'.format(highest_priority))
         other_requests = [
             rqst for rqst in requests
             if rqst.answer and rqst.answer.priority == 1]
@@ -774,7 +767,9 @@ class ServerTable(Table):
                 if rqst.answer and rqst.answer.priority == highest_priority]
         else:
             top_requests = []
-        print(u'top_requests: {}, other_requests: {}'.format(top_requests, other_requests))
+        # if top_requests:
+        #    print(u'highest_priority: {} top_requests: {}, other_requests: {}'
+        #          .format(highest_priority, top_requests, other_requests))
         if highest_priority == 4 \
                 and self.game.ruleset.basicStyle != Ruleset.Japanese \
                 and len(top_requests) > 1:
