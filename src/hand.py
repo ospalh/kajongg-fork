@@ -437,6 +437,9 @@ class Hand(object):
                     if len(part) > 4:
                         self.__announcements = part[4:]
         if self.__lastTile:
+            # TODO: This is the first bit where it blows up when we
+            # have more than one winner. Possibly because only the
+            # first winner shows eir hand.
             assert self.__lastTile in self.tileNames, 'lastTile %s is not in tiles %s, mjStr=%s' % (
                 self.__lastTile, ' '.join(self.tileNames), self.mjStr)
             if self.__lastSource == 'k':

@@ -117,7 +117,7 @@ class Game(object):
         # With Japanese play, riichi bets can carry over from one hand
         # to the next on exhaustive draws. Keep track of those.
         self.riichi_bets = 0
-        self.__winner = None
+        self.__winners = []  # We may have more than one winner.
         self.__currentHandId = None
         self.__prevHandId = None
         self.moves = []
@@ -171,21 +171,31 @@ class Game(object):
             self.wall.decorate()
 
     @apply
-    def winner(): # pylint: disable=E0202
-        """the name of the game server this game is attached to"""
+    def winners(): # pylint: disable=E0202
+        u"""
+        The winners of the last hand.
+
+        For Chinese games this should contain at most one winner (none
+        during a hand or after a draw.) For Japanese games there may
+        be up to three winners, when one discarded tile finishes more
+        than one hand.
+        """
         def fget(self):
             # pylint: disable=W0212
-            return self.__winner
+            return self.__winners
         def fset(self, value):
             # pylint: disable=W0212
-            if self.__winner != value:
-                if self.__winner:
-                    # Hmm. This looks like a bit of code that needs
-                    # changing to allow multiple winners.
-                    self.__winner.invalidateHand()
-                self.__winner = value
-                if value:
-                    value.invalidateHand()
+            if value:
+                value.sort()
+            # Make sure the comparison below is not thrown off by a
+            # different order of the winners.
+            if self.__winners != value:
+                # TODO: find out if this is right...
+                for loser in self.__winners:
+                    loser.invalidateHand()
+                self.__winners = value
+                for winner in self.__winners:
+                    winner.invalidateHand()
         return property(**locals())
 
     def addCsvTag(self, tag, forAllPlayers=False):
@@ -271,8 +281,14 @@ class Game(object):
         logException('Move references unknown player %s' % playerName)
 
     def losers(self):
-        """the 3 or 4 losers: All players without the winner"""
-        return list([x for x in self.players if x is not self.__winner])
+        """
+        The players that are not winners.
+
+        For Chinese games, this are the three players that are not the
+        winner if there is one, or all four players when the hand is drawn.
+        For Japanese games this functions should not be used.
+        """
+        return list([x for x in self.players if x not in self.__winners])
 
     @staticmethod
     def windOrder(player):
@@ -485,7 +501,7 @@ class Game(object):
         else:
             for player in self.players:
                 player.clearHand()
-            self.__winner = None
+            self.__winners = []
             if not self.isScoringGame():
                 self.sortPlayers()
             self.hidePopups()
@@ -562,16 +578,18 @@ class Game(object):
  points, payments,  balance, rotated, notrotated, repeatcounter, riichibets)
 VALUES (%d, %d, ?, ?, %d, '%s', %d, '%s', '%s', %d, %d, %d, %d, %d, %d, %d)"""
                 % (self.gameid, self.handctr, player.nameid, scoretime,
-                   int(player == self.__winner),
+                   # int(player == self.__winner),
+                   int(player in self.__winners),
                    WINDS[self.roundsFinished % 4], player.wind,
                    player.handTotal, player.payment, player.balance,
                    self.rotated, self.notRotated, self.repeat_counter,
                    self.riichi_bets),
                   list([player.hand.string, manualrules]))
             if Debug.scores:
-                self.debug('%s: handTotal=%s balance=%s %s' % (
-                    player,
-                    player.handTotal, player.balance, 'won' if player == self.winner else ''))
+                self.debug(
+                    '%s: handTotal=%s balance=%s %s' % (
+                        player, player.handTotal, player.balance,
+                        'won' if player in self.winners else ''))
             for usedRule in player.hand.usedRules:
                 rule = usedRule.rule
                 if rule.score.limits:
@@ -591,7 +609,9 @@ VALUES (%d, %d, ?, ?, %d, '%s', %d, '%s', '%s', %d, %d, %d, %d, %d, %d, %d)"""
                 "won,prevailing,wind,points,payments, balance,rotated,notrotated,repeat_counter,riichibets) "
                 "VALUES(%d,1,%d,?,?,%d,'%s',%d,'%s','%s',%d,%d,%d,%d,%d,%d,%d)" % \
                 (self.gameid, self.handctr, player.nameid,
-                 scoretime, int(player == self.__winner),
+                 scoretime,
+                 # int(player == self.__winner),
+                 int(player in self.__winners),
                  WINDS[self.roundsFinished % 4], player.wind, 0,
                  amount, player.balance, self.rotated, self.notRotated,
                  self.repeat_counter, self.riichi_bets),
@@ -703,8 +723,10 @@ from score where game=%d and hand=%d""" % (gameid, game.handctr))
             else:
                 player.getsPayment(record[2])
                 player.wind = wind
-            if record[3]:
-                game.winner = player
+            if record[3] and player not in game.winners:
+                # game.winner = player
+                game.winners += [player ,]
+                game.winners.sort()
             prevailing = record[4]
             game.repeat_counter = record[5]
             game.riichi_bets = record[6]
@@ -730,8 +752,8 @@ from score where game=%d and hand=%d""" % (gameid, game.handctr))
             # Japanese scoring is so different that it is easier to
             # just put it in an extra method.
             return self.__payJapaneseHand()
-        winner = self.__winner
-        if winner:
+        assert len(self.__winners) < 2
+        for winner in self.__winners:
             winner.wonCount += 1
             guilty = winner.usedDangerousFrom
             if guilty:
@@ -785,10 +807,9 @@ from score where game=%d and hand=%d""" % (gameid, game.handctr))
             return (i // 100) * 100 + 100
 
         # TODO: handle bankrupcy.
-        # TODO: multiple winner
-        winner = self.__winner
-        # for winner in self.winners
-        if winner:
+        for winner in self.__winners:
+            # TODO: Check that the simple for loop works out for
+            # multiple winners.
             # TODO: Hand back riichi bet
             winner.wonCount += 1
             payer = self.lastDiscardBy
@@ -1125,5 +1146,5 @@ class RemoteGame(PlayingGame):
     def saveHand(self):
         """server told us to save this hand"""
         for player in self.players:
-            assert player.hand.won == (player == self.winner)
+            assert player.hand.won == (player in  self.winners)
         Game.saveHand(self)

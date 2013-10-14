@@ -427,7 +427,13 @@ class ServerTable(Table):
         """
         requests = self.prioritize(requests)
         if requests and isinstance(requests[0].answer, MessageMahJongg):
-            requests[0].answer.serverAction(self, requests[0])
+            # TODO: The test looks good enough to detect robbed kongs,
+            # but we should handle all majong calls here, which may be
+            # more than one.
+            # TODO: This looks like we could use for else.
+            for request in requests:
+                if isinstance(request.answer, MessageMahJongg):
+                    requests.answer.serverAction(self, request)
         else:
             # Like exposing a chow or pung, *successfully* exposing a
             # kong also nixes chances for Blessing of Earth, Blessing
@@ -537,7 +543,8 @@ class ServerTable(Table):
             block = DeferredBlock(self)
             for player in self.game.players:
                 # there might be no winner, winner.others() would be wrong
-                if player != self.game.winner and player.shouldShowTiles():
+                if not player in self.game.winners \
+                        and player.shouldShowTiles():
                     # The winner tiles are already shown in
                     # claimMahJongg. With Japanese rules, some players
                     # do not show their tiles.

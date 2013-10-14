@@ -1143,12 +1143,17 @@ class ScratchingPole(Function):
 class StandardRotation(Function):
     @staticmethod
     def rotate(game):
-        return game.winner and game.winner.wind != 'E'
+        # We assume there is at most one winner
+        return game.winners and game.winners[0].wind != 'E'
 
 class JapaneseRotation(Function):
     @staticmethod
     def rotate(game):
-        return game.winner and game.winner.wind != 'E'
+        # Rule: there are winners and east is not among them.
+        # TODO: Check noten on exhaustive draw and for abortive draw
+        # or chombo
+        return game.winners \
+            and not [winner for winner in game.winners if winner.wind == 'E']
 
 class EastWonNineTimesInARow(Function):
     nineTimes = 9
@@ -1165,7 +1170,10 @@ class EastWonNineTimesInARow(Function):
             if game.isScoringGame():
                 # we are only proposing for the last needed Win
                 needWins  -= 1
-        if game.winner and game.winner.wind == 'E' and game.notRotated >= needWins:
+        if game.winners and game.winners[0].wind == 'E' \
+                and game.notRotated >= needWins:
+            # As we only use this for Chinese games, we assume that we
+            # have at most one winner.
             prevailing = WINDS[game.roundsFinished % 4]
             eastMJCount = int(Query("select count(1) from score "
                 "where game=%d and won=1 and wind='E' and player=%d "

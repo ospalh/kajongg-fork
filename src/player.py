@@ -264,7 +264,7 @@ class Player(object):
             if self.hasManualScore():
                 spValue = InternalParameters.field.scoringDialog.spValues[self.idx]
                 return spValue.value()
-            if not self.game.isScoringGame() and not self.game.winner:
+            if not self.game.isScoringGame() and not self.game.winners:
                 return 0
             return self.hand.total()
         return property(**locals())
@@ -533,7 +533,7 @@ class Player(object):
             return True
         # “Not all the rules” is a bit of a boast. At the moment we
         # show the winner hand.
-        if self is self.game.winner:
+        if self in self.game.winners:
             # We have won. Show.
             return True
         # Riichi, abortive draws and noten penalties are not
@@ -638,7 +638,7 @@ class Player(object):
         wonChar = 'm'
         lastSource = ''
         declaration = ''
-        if asWinner or self == game.winner:
+        if asWinner or self in game.winners:
             wonChar = 'M'
             lastSource = self.lastSource
             if self.originalCall:
@@ -737,7 +737,8 @@ class Player(object):
         """player declared mah jongg. Determine last meld, show concealed tiles grouped to melds"""
         assert not isinstance(lastTile, Tile)
         lastMeld = Meld(lastMeld) # do not change the original!
-        self.game.winner = self
+        self.game.winners.append(self)
+        self.game.winners.sort()
         if withDiscard:
             self.lastTile = withDiscard
             self.lastMeld = lastMeld
