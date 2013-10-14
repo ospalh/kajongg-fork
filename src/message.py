@@ -63,16 +63,6 @@ class Message(object):
     def __repr__(self):
         return "<Message: %s>" % self
 
-    def __cmp__(self, other):
-        u"""
-        Use the priority for comparison.
-
-        Use the priority for comparison. (This means that “a == b”
-        (same priority) is quite different from “a is b” (same
-        massage).) “if a < b:” means “if a has *higher* priority than
-        b.”
-        """
-        return -self.priority.__cmp__(-other.priority)
 
 class ServerMessage(Message):
     """those classes are used for messages from server to client"""
