@@ -24,6 +24,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 # The KDE translation teams will "automatically" translate name and
 # description into many languages.
 
+from common import BasicStyle
 from rule import PredefinedRuleset, Rule, Ruleset
 from util import m18nE, m18n
 
@@ -118,8 +119,8 @@ class ClassicalChinese(PredefinedRuleset):
         # Two rules that are used for Japanese style games.
         self.parameterRules.add(Rule(
                 'Chinese game', 'intbasicStyle||Ointernal||Omandatory',
-                parameter=Ruleset.Chinese, description=m18n('''\
-When this is set to Ruleset.Japanese, scoring, rotation and a number of \
+                parameter=BasicStyle.Chinese, description=m18n('''\
+When this is set to BasicStyle.Japanese, scoring, rotation and a number of \
 other things are handled differently.''')))
         self.parameterRules.add(Rule(
                 'No repeat points', 'intrepeatValue||Ointernal',
@@ -729,7 +730,7 @@ Self-drawn last tile. Not applied for concealed pinfu.''')))
         """
         self.parameterRules.add(Rule(
                 'Japanese game', 'intbasicStyle||Ointernal',
-                parameter=Ruleset.Japanese))
+                parameter=BasicStyle.Japanese))
         self.parameterRules.add(Rule(
                 'Points for mangan', 'intlimit||Omandatory', parameter=2000,
                 description=m18n(u'''\

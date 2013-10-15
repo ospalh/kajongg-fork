@@ -18,8 +18,7 @@ along with this program if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
-from common import elements
-from rule import Ruleset
+from common import elements, BasicStyle
 from tile import Tile
 
 
@@ -59,7 +58,7 @@ class Wall(object):
             tiles = self.kongBox[-count:]
             self.kongBox = self.kongBox[:-count]
             if len(self.kongBox) % 2 == 0 \
-                    and self.game.ruleset != Ruleset.Japanese:
+                    and self.game.ruleset != BasicStyle.Japanese:
                 self.placeLooseTiles()
             self.replenishDeadWall(len(tileNames))
         else:

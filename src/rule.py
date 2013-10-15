@@ -29,6 +29,7 @@ from PyQt4.QtCore import QString, QVariant
 
 from util import m18n, m18nc, m18nE, english, logException
 from query import Query, Transaction
+from common import BasicStyle
 
 import rulecode
 
@@ -161,7 +162,7 @@ class Score(object):
         """the total score"""
         if self.ruleset is None:
             raise Exception('Score.total: ruleset unknown for %s' % self)
-        if self.ruleset.basicStyle == Ruleset.Japanese:
+        if self.ruleset.basicStyle == BasicStyle.Japanese:
             # The Japanese rules are so convoluted that they are best
             # handled in an extra method.
             return self.japaneseTotal()
@@ -314,8 +315,6 @@ class Ruleset(object):
     cache = dict()
     hits = 0
     misses = 0
-    (Chinese, Japanese, American) = range(3)
-    # Define basic styles of play.
 
     @staticmethod
     def clearCache():

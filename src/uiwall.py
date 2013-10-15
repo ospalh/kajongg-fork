@@ -18,13 +18,12 @@ along with this program if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
-from common import InternalParameters, Preferences, ZValues
+from common import BasicStyle, InternalParameters, Preferences, ZValues
 from PyQt4.QtCore import QRectF, QPointF
 from PyQt4.QtGui import QGraphicsSimpleTextItem
 
 from board import PlayerWind, YellowText, Board, rotateCenter
 from game import Wall
-from rule import Ruleset
 from animation import animate, afterCurrentAnimationDo, Animated, \
     ParallelAnimationGroup
 
@@ -44,7 +43,7 @@ class UIWallSide(Board):
     def __init__(self, tileset, boardRotation, length):
         width = 1.5
         game = InternalParameters.field.game
-        if game and (game.ruleset.basicStyle == Ruleset.Japanese
+        if game and (game.ruleset.basicStyle == BasicStyle.Japanese
                      or game.ruleset.replenish_dead_wall):
             width = 1
         Board.__init__(
@@ -101,7 +100,7 @@ class UIWall(Wall):
             side.message.setVisible(False)
             side.message.setPos(side.center())
         corner_offset = 1
-        if game.ruleset.basicStyle == Ruleset.Japanese:
+        if game.ruleset.basicStyle == BasicStyle.Japanese:
             corner_offset = 0
         self.__sides[0].setPos(yWidth=sideLength)
         self.__sides[3].setPos(xHeight=corner_offset)
@@ -263,7 +262,7 @@ class UIWall(Wall):
         """
         x_off = 0
         y_off = 0.5
-        if self.game.ruleset.basicStyle == Ruleset.Japanese \
+        if self.game.ruleset.basicStyle == BasicStyle.Japanese \
                 or self.game.ruleset.replenish_dead_wall:
             x_off = -1
             y_off = 0
@@ -332,7 +331,7 @@ class UIWall(Wall):
     def __placeLooseTiles2(self, dummyResult):
         """place the last 2 tiles on top of kong box, no animation is active"""
         placeCount = len(self.kongBox) // 2
-        if self.game.ruleset.basicStyle != Ruleset.Japanese:
+        if self.game.ruleset.basicStyle != BasicStyle.Japanese:
             if placeCount >= 4:
                 first = min(placeCount-1, 5)
                 second = max(first-2, 1)

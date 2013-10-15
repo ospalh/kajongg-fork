@@ -28,7 +28,7 @@ from twisted.internet.defer import Deferred, succeed, DeferredList
 from twisted.python.failure import Failure
 from util import logDebug, logException, logWarning, Duration, m18nc
 from message import Message, MessageMahJongg
-from common import InternalParameters, Debug
+from common import BasicStyle, Debug, InternalParameters
 from rule import Ruleset
 from meld import meldsContent
 from game import RemoteGame
@@ -457,7 +457,7 @@ class Client(pb.Referenceable):
     def __maySayChow(self):
         """returns answer arguments for the server if calling chow is possible.
         returns the meld to be completed"""
-        if self.game.ruleset.basicStyle == Ruleset.Japanese \
+        if self.game.ruleset.basicStyle == BasicStyle.Japanese \
                 and not self.game.wall.living:
             # From the riichi rules: “The last tile in the wall can
             # only be claimed for a win, not for a kong, pung or
@@ -469,7 +469,7 @@ class Client(pb.Referenceable):
     def __maySayPung(self):
         """returns answer arguments for the server if calling pung is possible.
         returns the meld to be completed"""
-        if self.game.ruleset.basicStyle == Ruleset.Japanese \
+        if self.game.ruleset.basicStyle == BasicStyle.Japanese \
                 and not self.game.wall.living:
             # From the riichi rules: “The last tile in the wall can
             # only be claimed for a win, not for a kong, pung or
@@ -485,7 +485,7 @@ class Client(pb.Referenceable):
         """returns answer arguments for the server if calling or declaring kong is possible.
         returns the meld to be completed or to be declared"""
         if (self.game.ruleset.replenish_dead_wall \
-                or self.game.ruleset.basicStyle == Ruleset.Japanese) \
+                or self.game.ruleset.basicStyle == BasicStyle.Japanese) \
                 and not self.game.wall.living:
             # When we replenish the dead wall, no kong is possible
             # when the living wall is empty, as there is no tile to

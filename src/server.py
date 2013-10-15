@@ -26,6 +26,7 @@ O'Reilly Media, Inc., ISBN 0-596-10032-9
 import sys, os, random, traceback
 import signal
 import resource
+from common import BasicStyle
 
 # keyboardinterrupt should simply terminate
 signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -605,7 +606,7 @@ class ServerTable(Table):
             self.abort(msg, player.name, claim.name, ' '.join(hasTiles), ''.join(player.concealedTileNames))
             return
         if not self.game.wall.living and \
-                (self.game.ruleset.basicStyle == Ruleset.Japanese
+                (self.game.ruleset.basicStyle == BasicStyle.Japanese
                  or (self.game.ruleset.replenish_dead_wall
                      and meld.meldType == KONG)):
             # From the riichi rules: “The last tile in the wall can
@@ -711,7 +712,7 @@ class ServerTable(Table):
                 player, Message.UsedDangerousFrom,
                 source=discardingPlayer.name)
         # Use the right message here.
-        if self.game.ruleset.basicStyle != Ruleset.Japanese:
+        if self.game.ruleset.basicStyle != BasicStyle.Japanese:
             mmessage = Message.MahJongg
         else:
             if withDiscard or robbedTheKong:
@@ -778,7 +779,7 @@ class ServerTable(Table):
         #    print(u'highest_priority: {} top_requests: {}, other_requests: {}'
         #          .format(highest_priority, top_requests, other_requests))
         if highest_priority == 4 \
-                and self.game.ruleset.basicStyle != Ruleset.Japanese \
+                and self.game.ruleset.basicStyle != BasicStyle.Japanese \
                 and len(top_requests) > 1:
             # Now pick the winner of Chinese games
             # (The len(top_requests) test is an optimization. The code

@@ -23,7 +23,8 @@ from random import Random
 from collections import defaultdict
 from twisted.internet.defer import succeed
 from util import logError, logWarning, logException, logDebug, m18n, stack
-from common import WINDS, InternalParameters, elements, IntDict, Debug, isAlive
+from common import BasicStyle, Debug, IntDict, InternalParameters, WINDS, \
+    elements, isAlive
 from query import Transaction, Query
 from rule import Ruleset
 from tile import Tile
@@ -650,7 +651,7 @@ VALUES (%d, %d, ?, ?, %d, '%s', %d, '%s', '%s', %d, %d, %d, %d, %d, %d, %d)"""
             for idx, newWind in enumerate(winds):
                 self.players[idx].wind = newWind
             if self.roundsFinished % 4 and self.rotated == 0 \
-                    and not self.ruleset.basicStyle == Ruleset.Japanese:
+                    and not self.ruleset.basicStyle == BasicStyle.Japanese:
                 # Exchange seats between rounds, but not for Japanese
                 # games.
                 self.__exchangeSeats()
@@ -748,7 +749,7 @@ from score where game=%d and hand=%d""" % (gameid, game.handctr))
         """pay the scores"""
         # pylint: disable=R0912
         # too many branches
-        if self.ruleset.basicStyle == Ruleset.Japanese:
+        if self.ruleset.basicStyle == BasicStyle.Japanese:
             # Japanese scoring is so different that it is easier to
             # just put it in an extra method.
             return self.__payJapaneseHand()
@@ -913,7 +914,7 @@ from score where game=%d and hand=%d""" % (gameid, game.handctr))
         # the break wall are E: 22.2% (8 out of 36), S: 25%, W: 27.7%
         # (10 out of 36), N: 25%.
         sideLength = len(self.wall.tiles) // 4
-        if self.ruleset.basicStyle != Ruleset.Japanese:
+        if self.ruleset.basicStyle != BasicStyle.Japanese:
             # Add two more throws, but not for Japanese games.
             self.dice += [
                 self.randomGenerator.randrange(1, 7),
@@ -930,7 +931,7 @@ from score where game=%d and hand=%d""" % (gameid, game.handctr))
         """returns a list of explaining texts if discarding tile
         would be Dangerous game for forPlayer. One text for each
         reason - there might be more than one"""
-        if self.ruleset.basicStyle == Ruleset.Japanese:
+        if self.ruleset.basicStyle == BasicStyle.Japanese:
             # Tiles are not especially dangerous for anybody from the
             # rules perspective in Japanese games.
             return []

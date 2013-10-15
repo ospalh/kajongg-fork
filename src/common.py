@@ -45,6 +45,13 @@ def isAlive(qobj):
     else:
         return True
 
+
+class BasicStyle(object):
+    u"""Just a glorified enum to keep track of the basic style of play."""
+    (Chinese, Japanese, American) = range(3)
+    # Basic styles of play.
+
+
 class Debug:
     """holds flags for debugging output. At a later time we might
     want to add command line parameters for initialisation, and

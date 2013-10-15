@@ -22,12 +22,12 @@ import sys
 from collections import defaultdict
 
 from util import logException, logWarning, m18n, m18nc, m18nE
-from common import WINDS, InternalParameters, elements, IntDict, Debug
+from common import BasicStyle, Debug, IntDict, InternalParameters, WINDS, \
+    elements
 from query import Transaction, Query
 from tile import Tile
 from meld import Meld, CONCEALED, PUNG, hasChows, meldsContent
 from hand import Hand
-from rule import Ruleset
 
 class Players(list):
     """a list of players where the player can also be indexed by wind.
@@ -488,7 +488,7 @@ class Player(object):
         """returns True if the player has no choice, otherwise False.
         Exposing may be a meld which will be exposed before we might
         play dangerous"""
-        if self.game.ruleset.basicStyle == Ruleset.Japanese:
+        if self.game.ruleset.basicStyle == BasicStyle.Japanese:
             # There is no *especially* dangerous play in Riichi. The
             # discarder *always* pays for all on ron.
             return False
@@ -527,7 +527,7 @@ class Player(object):
           penalty must show their hands.
         Not all the rules are implemented yet.
         """
-        if self.game.ruleset.basicStyle != Ruleset.Japanese \
+        if self.game.ruleset.basicStyle != BasicStyle.Japanese \
                 or self.game.isScoringGame():
             # Standard. Do show.
             return True

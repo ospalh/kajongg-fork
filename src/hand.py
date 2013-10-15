@@ -24,7 +24,7 @@ Read the user manual for a description of the interface to this scoring engine
 from util import logDebug
 from meld import Meld, meldKey, meldsContent, Pairs, CONCEALED
 from rule import Score, Ruleset
-from common import elements, Debug
+from common import elements, BasicStyle, Debug
 
 # Unroll the strings for n doubles. No doubles and kazoe yakuman are
 # treated separately.
@@ -871,7 +871,7 @@ class Hand(object):
         double roules and other (limits) rules. For Japanese, it is
         more complicated.
         """
-        if self.ruleset.basicStyle == Ruleset.Japanese:
+        if self.ruleset.basicStyle == BasicStyle.Japanese:
             return self.explainJapanese()
         result = [x.rule.explain() for x in self.usedRules
             if x.rule.score.points]
