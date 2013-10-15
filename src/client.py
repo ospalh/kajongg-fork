@@ -27,7 +27,7 @@ from twisted.internet.task import deferLater
 from twisted.internet.defer import Deferred, succeed, DeferredList
 from twisted.python.failure import Failure
 from util import logDebug, logException, logWarning, Duration, m18nc
-from message import Message, MessageMahJongg
+from message import Message
 from common import BasicStyle, Debug, InternalParameters
 from rule import Ruleset
 from meld import meldsContent
@@ -437,7 +437,10 @@ class Client(pb.Referenceable):
         # we would see a blue focusRect in the handboard even when a tile
         # ist still moving from the discardboard to the handboard.
         animate().addCallback(move.player.getsFocus)
-        possibleAnswers = [Message.Discard, Message.Kong, Message.MahJongg]
+        if self.game.ruleset.basicStyle == BasicStyle.Japanese:
+            possibleAnswers = [Message.Discard, Message.Kong, Message.Tsumo]
+        else:
+            possibleAnswers = [Message.Discard, Message.Kong, Message.MahJongg]
         if not move.player.discarded:
             possibleAnswers.append(Message.OriginalCall)
         return self.ask(move, possibleAnswers)
@@ -536,8 +539,19 @@ class Client(pb.Referenceable):
             self.sayable[Message.Chow] = self.__maySayChow()
         if Message.Kong in answers:
             self.sayable[Message.Kong] = self.__maySayKong()
-        if any(isinstance(mmj, MessageMahJongg) for mmj in answers):
+        if Message.MahJongg in answers:
             self.sayable[Message.MahJongg] = self.__maySayMahjongg(move)
+        if Message.Ron in answers:
+            self.sayable[Message.Ron] = self.__maySayMahjongg(move)
+            # When we can say Ron, we *should* have a discarded tile.
+            assert not self.sayable[Message.Ron] \
+                or self.sayable[Message.Ron][1]
+        if Message.Tsumo in answers:
+            self.sayable[Message.Tsumo] = self.__maySayMahjongg(move)
+            # When we can say Tsumo we should *not* have a discarded
+            # tile.
+            assert not self.sayable[Message.Tsumo] \
+                or not self.sayable[Message.Tsumo][1]
         if Message.OriginalCall in answers:
             self.sayable[Message.OriginalCall] = self.__maySayOriginalCall()
 

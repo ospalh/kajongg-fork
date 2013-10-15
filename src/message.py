@@ -23,7 +23,7 @@ import datetime
 from util import m18n, m18nc, m18ncE, logWarning, logException, logDebug, SERVERMARK
 from sound import Voice, Sound
 from meld import Meld
-from common import InternalParameters, Debug
+from common import BasicStyle, Debug, InternalParameters
 
 # pylint: disable=W0231
 # multiple inheritance: pylint thinks ServerMessage.__init__ does not get called.
@@ -411,7 +411,16 @@ class MessageAskForClaims(ServerMessage):
     def clientAction(self, client, move):
         """ask the player"""
         if not client.thatWasMe(move.player):
-            return client.ask(move, [Message.NoClaim, Message.Chow, Message.Pung, Message.Kong, Message.MahJongg])
+            if client.game.ruleset.basicStyle == BasicStyle.Japanese:
+                # Use the right (more specific) call.
+                prompts = [
+                    Message.NoClaim, Message.Chow, Message.Pung, Message.Kong,
+                    Message.Ron]
+            else:
+                prompts = [
+                    Message.NoClaim, Message.Chow, Message.Pung, Message.Kong,
+                    Message.MahJongg]
+            return client.ask(move, prompts)
 
 class MessagePickedTile(ServerMessage):
     """the game server tells us who picked a tile"""
@@ -504,7 +513,11 @@ class MessageDeclaredKong(ServerMessage):
                 move.player.showConcealedTiles(move.source)
             else:
                 move.player.showConcealedTiles(move.source[3:4])
-            prompts = [Message.NoClaim, Message.MahJongg]
+            if client.game.ruleset.basicStyle == BasicStyle.Japanese:
+                # Use the right (more specific) call.
+                prompts = [Message.NoClaim, Message.Ron]
+            else:
+                prompts = [Message.NoClaim, Message.MahJongg]
         move.exposedMeld = move.player.exposeMeld(move.source)
         if prompts:
             return client.ask(move, prompts)

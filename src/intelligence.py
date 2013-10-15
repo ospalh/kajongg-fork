@@ -218,8 +218,13 @@ class AIDefault:
         # pylint: disable=R0912
         # disable warning about too many branches
         answer = parameter = None
-        tryAnswers = (x for x in [Message.MahJongg, Message.OriginalCall, Message.Kong,
-            Message.Pung, Message.Chow, Message.Discard] if x in answers)
+        # Just use any of the win messages. No need to check for the rulecode.
+        tryAnswers = (
+            x for x in [
+                Message.MahJongg, Message.Ron, Message.Tsumo,
+                Message.OriginalCall, Message.Kong, Message.Pung,
+                Message.Chow, Message.Discard]
+            if x in answers)
         hand = self.client.game.myself.hand
         claimness = IntDict()
         discard = self.client.game.lastDiscard
