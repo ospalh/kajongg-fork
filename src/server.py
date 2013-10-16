@@ -434,7 +434,7 @@ class ServerTable(Table):
             # TODO: This looks like we could use for else.
             for request in requests:
                 if isinstance(request.answer, MessageMahJongg):
-                    requests.answer.serverAction(self, request)
+                    request.answer.serverAction(self, request)
         else:
             # Like exposing a chow or pung, *successfully* exposing a
             # kong also nixes chances for Blessing of Earth, Blessing
@@ -739,10 +739,12 @@ class ServerTable(Table):
     def prioritize(self, requests):
         """returns only requests we want to execute"""
         if not self.running:
-            return
+            # We used to return None here. Make it so we can always
+            # iterate over the results.
+            return []
         # There are three types of requests, characterized by Request.answer:
         # No anwswer: Should be dropped
-        # Priority 0: NoClaim or OK. Should be dropped.
+        # Priority 0: NoClaim or OK. Should also be dropped.
         # Priority 1: Other info, usually discards, but may include
         #    things like riichi declarations. (I think.)  Should be
         #    kept.
@@ -762,10 +764,10 @@ class ServerTable(Table):
         except (TypeError, ):
             print('No claim, TypeError')
             # max() throws TypeError, max([]) throws ValueError.
-            return  # None
+            return []
         except (ValueError, ):
             # No claims left. Typical case when nobody wants a tile.
-            return  # None
+            return []
         other_requests = [
             rqst for rqst in requests
             if rqst.answer and rqst.answer.priority == 1]
@@ -802,6 +804,9 @@ class ServerTable(Table):
         """a player did something"""
         if not self.running:
             return
+        # TODO: There seems to be a problem dealing with Ron claims at
+        # the moment. Looks like the server does not wait for a
+        # possible second claim.
         answers = self.prioritize(requests)
         if not answers:
             return
