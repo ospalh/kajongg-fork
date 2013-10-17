@@ -754,7 +754,8 @@ from score where game=%d and hand=%d""" % (gameid, game.handctr))
             # just put it in an extra method.
             return self.__payJapaneseHand()
         assert len(self.__winners) < 2
-        for winner in self.__winners:
+        if self.__winners:
+            winner = self.__winners[0]
             winner.wonCount += 1
             guilty = winner.usedDangerousFrom
             if guilty:
@@ -796,7 +797,6 @@ from score where game=%d and hand=%d""" % (gameid, game.handctr))
         play” in Chinese rules, only *every* discard is treated that
         way.) Also, the points are rounded to full hundreds.
         """
-
         def upToHundred(i):
             """Return number, rounded up to the xext hundred."""
             # We play around with // and / here. See also rule.Score,
@@ -849,20 +849,23 @@ from score where game=%d and hand=%d""" % (gameid, game.handctr))
                     else:
                         loser.getsPayment(-upToHundred(score))
                         winner.getsPayment(upToHundred(score))
-                    # The repeat value is not doubled for E.
+                    # The repeat value is not doubled for E, so we
+                    # have to do this separately.
                     loser.getsPayment(
                         -self.repeat_counter * self.ruleset.repeatValue)
                     winner.getsPayment(
                         self.repeat_counter * self.ruleset.repeatValue)
-            if winner.wind == 'E':
+        if self.__winners:
+            if any(winner.wind == 'E' for winner in self.__winners):
                 self.repeat_counter += 1
                 if Debug.scores:
-                    self.debug('East win, now {} counter(s).'.format(
+                    self.debug('East is a winner, now {} counter(s).'.format(
                             self.repeat_counter))
             else:
                 if Debug.scores:
-                    self.debug('Win, but not by East. Resetting counters.')
-                self.repeat_counter = 0
+                    self.repeat_counter = 0
+                    self.debug(
+                        'Somebody won, but not East. Resetting counters.')
         else:
             # Here we should check for  Nagashi mangan. TODO
             # And settle the noten penalties. TODO
@@ -872,6 +875,8 @@ from score where game=%d and hand=%d""" % (gameid, game.handctr))
             if Debug.scores:
                     self.debug('No winner, now {} counter(s)'.format(
                         self.repeat_counter))
+
+
 
     def lastMoves(self, only=None, without=None):
         """filters and yields the moves in reversed order"""
