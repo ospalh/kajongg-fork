@@ -68,11 +68,13 @@ class Debug:
     modelTest = False
     focusable = ''
     robbingKong = False
-    mahJongg = False
+    # mahJongg = False
+    mahJongg = True
     sound = False
     chat = False
     argString = None
-    scores = False
+    # scores = False
+    scores = True
     handCache = False
     explain = False
     random = False

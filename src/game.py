@@ -815,17 +815,20 @@ from score where game=%d and hand=%d""" % (gameid, game.handctr))
             winner.wonCount += 1
             payer = self.lastDiscardBy
             score = winner.handTotal
-            if Debug.explain:
+            if Debug.explain and self.belongsToHumanPlayer():
                 if not self.belongsToRobotPlayer():
                     self.debug('%s: %s' % (winner, winner.hand.string))
                     for line in winner.hand.explain():
                         self.debug('   %s' % (line))
             # score = winner.handTotal + self.repeats * 100
+            if Debug.scores and self.belongsToHumanPlayer():
+                self.debug(
+                    'Winner: {}, basic score: {}, repeat counters: {}.'.format(
+                        winner, score, self.repeat_counter))
             if payer:
                 # Ron
-                if Debug.scores:
-                    self.debug('%s: winner %s. %s pays for all' % \
-                                   (self.handId(), winner, payer))
+                if Debug.scores and self.belongsToHumanPlayer():
+                    self.debug('Ron. {} pays for all'.format(payer))
                 score = score * 6 if winner.wind == 'E' else score * 4
                 score = upToHundred(score)
                 payer.getsPayment(
@@ -836,6 +839,8 @@ from score where game=%d and hand=%d""" % (gameid, game.handctr))
                     + 3 * self.repeat_counter * self.ruleset.repeatValue)
             else:
                 # Tsumo
+                if Debug.scores and self.belongsToHumanPlayer():
+                    self.debug('Tsumo, all losers pay.')
                 if winner.wind == 'E':
                     score *= 2
                 for loser in self.players:
@@ -858,12 +863,12 @@ from score where game=%d and hand=%d""" % (gameid, game.handctr))
         if self.__winners:
             if any(winner.wind == 'E' for winner in self.__winners):
                 self.repeat_counter += 1
-                if Debug.scores:
+                if Debug.scores and self.belongsToHumanPlayer():
                     self.debug('East is a winner, now {} counter(s).'.format(
                             self.repeat_counter))
             else:
-                if Debug.scores:
-                    self.repeat_counter = 0
+                self.repeat_counter = 0
+                if Debug.scores and self.belongsToHumanPlayer():
                     self.debug(
                         'Somebody won, but not East. Resetting counters.')
         else:
@@ -873,8 +878,8 @@ from score where game=%d and hand=%d""" % (gameid, game.handctr))
             # if not chombo ...
             self.repeat_counter += 1
             if Debug.scores:
-                    self.debug('No winner, now {} counter(s)'.format(
-                        self.repeat_counter))
+                self.debug(
+                    'No winner, now {} counter(s)'.format(self.repeat_counter))
 
 
 
