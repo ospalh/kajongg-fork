@@ -60,7 +60,8 @@ class Wall(object):
             if len(self.kongBox) % 2 == 0 \
                     and self.game.ruleset != BasicStyle.Japanese:
                 self.placeLooseTiles()
-            self.replenishDeadWall(len(tileNames))
+            if replenish:
+                self.replenishDeadWall(len(tileNames))
         else:
             if len(self.living) < count:
                 raise WallEmpty
