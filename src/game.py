@@ -691,37 +691,38 @@ class Game(object):
         # pylint: disable=R0912
         # too many branches
         winner = self.__winner
-        if winner:
-            winner.wonCount += 1
-            guilty = winner.usedDangerousFrom
-            if guilty:
-                payAction = self.ruleset.findAction('payforall')
-            if guilty and payAction:
-                if Debug.dangerousGame:
-                    self.debug('%s: winner %s. %s pays for all' % \
-                                (self.handId(), winner, guilty))
-                guilty.hand.usedRules.append((payAction, None))
-                score = winner.handTotal
-                score = score * 6 if winner.wind == 'E' else score * 4
-                guilty.getsPayment(-score)
-                winner.getsPayment(score)
-                return
+        if not winner:
+            return
+        winner.wonCount += 1
+        guilty = winner.usedDangerousFrom
+        if guilty:
+            payAction = self.ruleset.findAction('payforall')
+        if guilty and payAction:
+            if Debug.dangerousGame:
+                self.debug('%s: winner %s. %s pays for all' % \
+                            (self.handId(), winner, guilty))
+            guilty.hand.usedRules.append((payAction, None))
+            score = winner.handTotal
+            score = score * 6 if winner.wind == 'E' else score * 4
+            guilty.getsPayment(-score)
+            winner.getsPayment(score)
+            return
 
-            for player1 in self.players:
-                if Debug.explain:
-                    self.debug('%s: %s' % (player1, player1.hand.string))
-                    for line in player1.hand.explain():
-                        self.debug('   %s' % (line))
-                for player2 in self.players:
-                    if id(player1) != id(player2):
-                        if player1.wind == 'E' or player2.wind == 'E':
-                            efactor = 2
-                        else:
-                            efactor = 1
-                        if player2 != winner:
-                            player1.getsPayment(player1.handTotal * efactor)
-                        if player1 != winner:
-                            player1.getsPayment(-player2.handTotal * efactor)
+        for player1 in self.players:
+            if Debug.explain:
+                self.debug('%s: %s' % (player1, player1.hand.string))
+                for line in player1.hand.explain():
+                    self.debug('   %s' % (line))
+            for player2 in self.players:
+                if id(player1) != id(player2):
+                    if player1.wind == 'E' or player2.wind == 'E':
+                        efactor = 2
+                    else:
+                        efactor = 1
+                    if player2 != winner:
+                        player1.getsPayment(player1.handTotal * efactor)
+                    if player1 != winner:
+                        player1.getsPayment(-player2.handTotal * efactor)
 
     def lastMoves(self, only=None, without=None):
         """filters and yields the moves in reversed order"""
