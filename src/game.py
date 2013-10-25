@@ -754,22 +754,25 @@ from score where game=%d and hand=%d""" % (gameid, game.handctr))
             # just put it in an extra method.
             return self.__payJapaneseHand()
         assert len(self.__winners) < 2
-        if self.__winners:
+        try:
             winner = self.__winners[0]
-            winner.wonCount += 1
-            guilty = winner.usedDangerousFrom
-            if guilty:
-                payAction = self.ruleset.findUniqueOption('payforall')
-            if guilty and payAction:
-                if Debug.dangerousGame:
-                    self.debug('%s: winner %s. %s pays for all' % \
-                                (self.handId(), winner, guilty))
-                guilty.hand.usedRules.append((payAction, None))
-                score = winner.handTotal
-                score = score * 6 if winner.wind == 'E' else score * 4
-                guilty.getsPayment(-score)
-                winner.getsPayment(score)
-                return
+        except IndexError:
+            # No winner, no score
+            return
+        winner.wonCount += 1
+        guilty = winner.usedDangerousFrom
+        if guilty:
+            payAction = self.ruleset.findUniqueOption('payforall')
+        if guilty and payAction:
+            if Debug.dangerousGame:
+                self.debug('%s: winner %s. %s pays for all' % \
+                            (self.handId(), winner, guilty))
+            guilty.hand.usedRules.append((payAction, None))
+            score = winner.handTotal
+            score = score * 6 if winner.wind == 'E' else score * 4
+            guilty.getsPayment(-score)
+            winner.getsPayment(score)
+            return
 
         for player1 in self.players:
             if Debug.explain:
