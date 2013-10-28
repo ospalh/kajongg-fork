@@ -149,7 +149,12 @@ class UIWall(Wall):
     def __shuffleTiles(self):
         """shuffle tiles for next hand"""
         discardBoard = InternalParameters.field.discardBoard
-        places = [(x, y) for x in range(-3, discardBoard.width+3) for y in range(-3, discardBoard.height+3)]
+        try:
+            places = [(x, y) for x in range(-3, discardBoard.width+3)
+                      for y in range(-3, discardBoard.height+3)]
+        except AttributeError:
+            # No discardBoard after all. (Japanese game.)
+            return
         places = self.game.randomGenerator.sample(places, len(self.tiles))
         for idx, tile in enumerate(self.tiles):
             tile.dark = True

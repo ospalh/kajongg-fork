@@ -515,11 +515,12 @@ class PlayField(KXmlGuiWindow):
         self.background = None # just for pylint
         self.tilesetName = Preferences.tilesetName
         self.windTileset = Tileset(Preferences.windTilesetName)
-
-        self.discardBoard = DiscardBoard()
-        self.discardBoard.setVisible(False)
-        scene.addItem(self.discardBoard)
-
+        # Added later, if needed. We use the existance of the
+        # discardBoard as a check.
+        self.discardBoard = None
+        # self.discardBoard = DiscardBoard()
+        # self.discardBoard.setVisible(False)
+        # scene.addItem(self.discardBoard)
         self.selectorBoard = SelectorBoard()
         self.selectorBoard.setVisible(False)
         scene.addItem(self.selectorBoard)
@@ -565,8 +566,9 @@ class PlayField(KXmlGuiWindow):
         """shows the wall according to the game rules (lenght may vary)"""
         UIWall(self.game)
         if self.discardBoard:
-            # scale it such that it uses the place within the wall optimally.
-            # we need to redo this because the wall length can vary between games.
+            # Scale it such that it uses the place within the wall
+            # optimally.  we need to redo this because the wall length
+            # can vary between games.
             self.discardBoard.maximize()
 
     def genPlayers(self):
@@ -613,7 +615,10 @@ class PlayField(KXmlGuiWindow):
     def hideGame(self, dummyResult=None):
         """remove all visible traces of the current game"""
         self.setWindowTitle('Kajongg')
-        self.discardBoard.hide()
+        try:
+            self.discardBoard.hide()
+        except AttributeError:
+            pass
         self.selectorBoard.tiles = []
         self.selectorBoard.allSelectorTiles = []
         self.centralScene.removeTiles()
@@ -982,6 +987,20 @@ class PlayField(KXmlGuiWindow):
         if self.game:
             self.game.wall.decorate()
 
+    def addDiscardBoard(self):
+        assert not self.discardBoard
+        self.discardBoard = DiscardBoard()
+        self.centralScene.addItem(self.discardBoard)
+        # I guess some of the setVisible and setEnabled may be
+        # redundant if we do it this way. Oh, well.
+        self.discardBoard.setVisible(True)
+        self.discardBoard.setEnabled(True)
+        self.discardBoard.setAcceptDrops(True)
+        self.discardBoard.showShadows = self.showShadows
+        # Do we need something like removeDiscardBoard when we go from
+        # Chinese to Japanese games?
+
+
     def updateGUI(self):
         """update some actions, all auxiliary windows and the statusbar"""
         game = self.game
@@ -992,7 +1011,9 @@ class PlayField(KXmlGuiWindow):
         scoring = bool(game and game.isScoringGame())
         self.selectorBoard.setVisible(scoring)
         self.selectorBoard.setEnabled(scoring)
-        self.discardBoard.setVisible(bool(game) and not scoring)
+        chinese_game = bool(game) and game.ruleset.BasicStyle != Japanese \
+            and not scoring
+        self.discardBoard.setVisible(chinese_game)
         self.actionScoring.setEnabled(scoring and not game.finished())
         self.actionAutoPlay.setEnabled(not self.startingGame and not scoring)
         self.actionChat.setEnabled(bool(game) and bool(game.client)

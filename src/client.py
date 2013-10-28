@@ -408,13 +408,15 @@ class Client(pb.Referenceable):
     def claimed(self, move):
         """somebody claimed a discarded tile"""
         calledTile = self.game.lastDiscard
+        discardedBy = self.game.lastDiscardBy
         self.game.lastDiscard = None
         self.game.lastDiscardBy = None
         calledTileName = calledTile.element
         self.game.discardedTiles[calledTileName.lower()] -= 1
         assert calledTileName in move.source, '%s %s'% (calledTileName, move.source)
-        if InternalParameters.field:
-            InternalParameters.field.discardBoard.lastDiscarded = None
+        # The discardBoard is either the shared, randomized or the
+        # indiviual, orderd one.
+        discardBy.discardBoard.lastDiscarded = None
         move.player.lastTile = calledTileName.lower()
         move.player.lastSource = 'd'
         hadTiles = move.source[:]

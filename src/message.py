@@ -379,7 +379,12 @@ class MessageInitHand(ServerMessage):
         field = InternalParameters.field
         if field:
             field.setWindowTitle(m18n('Kajongg <numid>%1</numid>', client.game.handId()))
-            field.discardBoard.setRandomPlaces(client.game.randomGenerator)
+            try:
+                field.discardBoard.setRandomPlaces(client.game.randomGenerator)
+            except AttributeError:
+                # EAFP: For Japanese game/ordered discard, we don’t
+                # have to set random places.
+                pass
         client.game.initHand()
 
 class MessageSetConcealedTiles(ServerMessage):

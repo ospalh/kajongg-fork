@@ -163,6 +163,7 @@ class Board(QGraphicsRectItem):
         QGraphicsRectItem.__init__(self)
         self.tiles = []
         self.isHandBoard = False
+        self.isDiscardBoard = False
         self._focusTile = None
         self._noPen()
         self.tileDragEnabled = False
@@ -204,7 +205,7 @@ class Board(QGraphicsRectItem):
             prevTile = self._focusTile
             if tile:
                 assert tile.element != 'Xy', tile
-                if not isinstance(tile.board, DiscardBoard):
+                if not self.isDiscardBoard
                     assert tile.focusable, tile
                 self._focusTile = tile
             else:
@@ -871,6 +872,7 @@ class DiscardBoard(CourtBoard):
         CourtBoard.__init__(self, 11, 9)
         self.__places = None
         self.lastDiscarded = None
+        self.isDiscardBoard = True
         self.setAcceptDrops(True)
 
     # pylint: disable=R0201

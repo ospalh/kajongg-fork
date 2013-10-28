@@ -167,7 +167,9 @@ class Game(object):
         if self.shouldSave:
             self.saveNewGame()
         if field:
-            self.initVisiblePlayers()
+            if self.ruleset != Japanese:
+                field.addDiscardBoard()
+            self.initVisiblePlayers(field)
             field.updateGUI()
             self.wall.decorate()
 
@@ -253,16 +255,23 @@ class Game(object):
             self.wall.hide()
             self.wall = None
 
-    def initVisiblePlayers(self):
+    def initVisiblePlayers(self, field):
         """make players visible"""
         for idx, player in enumerate(self.players):
             player.front = self.wall[idx]
             player.clearHand()
             player.handBoard.setVisible(True)
             scoring = self.isScoringGame()
-            player.handBoard.setEnabled(scoring or \
-                (self.belongsToHumanPlayer() and player == self.myself))
+            meAndMine = scoring \
+                or (self.belongsToHumanPlayer() and player is self.myself)
+            player.handBoard.setEnabled(meAndMine)
             player.handBoard.showMoveHelper(scoring)
+            if field.discardBoard is None:
+                player.discardBoard.setVisible(True)
+                player.discardBoard.setEnabled(meAndMine)
+                player.discardBoard.setAcceptDrops(meAndMine)
+            else:
+                player.discardBoard = field.discardBoard
         InternalParameters.field.adjustView()
 
     def setConcealedTiles(self, allPlayerTiles):
@@ -1131,7 +1140,11 @@ class RemoteGame(PlayingGame):
                 # thus minimizing tile movement
                 self.lastDiscard = matchingTiles[-1]
                 self.lastDiscard.element = tileName
-            InternalParameters.field.discardBoard.discardTile(self.lastDiscard)
+            # The discardBoard is either the shared, randomized or the
+            # indiviual, orderd one.
+            # InternalParameters.field.discardBoard.discardTile(
+            #     self.lastDiscard)
+            player.discardBoard.discardTile(self.lastDiscard)
         else:
             self.lastDiscard = Tile(tileName)
         player.remove(tile=self.lastDiscard)
