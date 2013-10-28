@@ -167,7 +167,7 @@ class Game(object):
         if self.shouldSave:
             self.saveNewGame()
         if field:
-            if self.ruleset != Japanese:
+            if self.ruleset.basicStyle != BasicStyle.Japanese:
                 field.addDiscardBoard()
             self.initVisiblePlayers(field)
             field.updateGUI()
@@ -251,6 +251,9 @@ class Game(object):
             if player.handBoard:
                 player.clearHand()
                 player.handBoard.hide()
+                # Maybe we hide the central discardBoard four times,
+                # after it has been hidden once already. So what.
+                player.discardBoard.hide()
         if self.wall:
             self.wall.hide()
             self.wall = None
@@ -429,7 +432,8 @@ class Game(object):
         """sort by wind order. If we are in a remote game, place ourself at bottom (idx=0)"""
         players = self.players
         if InternalParameters.field:
-            fieldAttributes = list([(p.handBoard, p.front) for p in players])
+            fieldAttributes = list(
+                [(p.handBoard, p.front, p.discardBoard) for p in players])
         players.sort(key=Game.windOrder)
         if self.belongsToHumanPlayer():
             myName = self.myself.name
@@ -442,8 +446,15 @@ class Game(object):
             self.myself = players[0]
         if InternalParameters.field:
             for idx, player in enumerate(players):
-                player.handBoard, player.front = fieldAttributes[idx]
+                player.handBoard, player.front, player.discardBoard = \
+                    fieldAttributes[idx]
                 player.handBoard.player = player
+                try:
+                    player.discardBoard.setPlayer(player)
+                except AttributeError:
+                    # EAFP discrimiation between single/Chinese and
+                    # individual/Japaneses discard boards.
+                    pass
         self.activePlayer = self.players['E']
 
     @staticmethod

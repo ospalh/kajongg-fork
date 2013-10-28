@@ -21,7 +21,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 import sys
 import os
 from util import logError, m18n, m18nc, logWarning
-from common import WINDS, LIGHTSOURCES, InternalParameters, Preferences, isAlive
+from common import WINDS, LIGHTSOURCES, InternalParameters, Preferences, isAlive, BasicStyle
 import cgitb, tempfile, webbrowser
 from twisted.internet.defer import succeed, fail
 
@@ -62,7 +62,7 @@ from kde import Sorry, QuestionYesNo, KIcon, KAction, KApplication, KToggleFullS
 try:
     from query import Query
     from tile import Tile
-    from board import WindLabel, FittingView, SelectorBoard, DiscardBoard, MJScene
+    from board import WindLabel, FittingView, SelectorBoard, OrderedDiscardBoard, MJScene, SharedDiscardBoard
     from handboard import HandBoard
     from playerlist import PlayerList
     from tileset import Tileset
@@ -255,13 +255,17 @@ class VisiblePlayer(Player):
     # too many public methods
     def __init__(self, game, idx):
         assert game
-        self.handBoard = None # because Player.init calls clearHand()
+        self.handBoard = None  # because Player.init calls clearHand()
+        self.discardBoard = None  # because Player.init calls clearHand()
         Player.__init__(self, game)
         self.idx = idx
         self.front = game.wall[idx]
         self.manualRuleBoxes = []
         self.handBoard = HandBoard(self)
         self.handBoard.setVisible(False)
+        if game.ruleset.basicStyle == BasicStyle.Japanese:
+            self.discardBoard = OrderedDiscardBoard(self)
+            self.discardBoard.setVisible(False)
 
     def clearHand(self):
         """clears attributes related to current hand"""
@@ -989,7 +993,7 @@ class PlayField(KXmlGuiWindow):
 
     def addDiscardBoard(self):
         assert not self.discardBoard
-        self.discardBoard = DiscardBoard()
+        self.discardBoard = SharedDiscardBoard()
         self.centralScene.addItem(self.discardBoard)
         # I guess some of the setVisible and setEnabled may be
         # redundant if we do it this way. Oh, well.
@@ -1011,9 +1015,11 @@ class PlayField(KXmlGuiWindow):
         scoring = bool(game and game.isScoringGame())
         self.selectorBoard.setVisible(scoring)
         self.selectorBoard.setEnabled(scoring)
-        chinese_game = bool(game) and game.ruleset.BasicStyle != Japanese \
-            and not scoring
-        self.discardBoard.setVisible(chinese_game)
+        try:
+            self.discardBoard.setVisible(bool(game) and not scoring)
+        except AttributeError:
+            # EAFP: Japanese game.
+            pass
         self.actionScoring.setEnabled(scoring and not game.finished())
         self.actionAutoPlay.setEnabled(not self.startingGame and not scoring)
         self.actionChat.setEnabled(bool(game) and bool(game.client)

@@ -205,7 +205,7 @@ class Board(QGraphicsRectItem):
             prevTile = self._focusTile
             if tile:
                 assert tile.element != 'Xy', tile
-                if not self.isDiscardBoard
+                if not self.isDiscardBoard:
                     assert tile.focusable, tile
                 self._focusTile = tile
             else:
@@ -866,35 +866,32 @@ class YellowText(QGraphicsRectItem):
         painter.fillRect(self.rect(), QBrush(QColor('yellow')))
         painter.drawText(self.rect(), self.msg)
 
-class DiscardBoard(CourtBoard):
-    """A special board for discarded tiles"""
-    def __init__(self):
-        CourtBoard.__init__(self, 11, 9)
-        self.__places = None
+
+class DiscardBoard(Board):
+    """
+    A special board for discarded tiles.
+    """
+    def __init__(self, width, height):
+        Board.__init__(self, width, height, InternalParameters.field.tileset)
         self.lastDiscarded = None
         self.isDiscardBoard = True
-        self.setAcceptDrops(True)
+
+    def discardTile(self, tile):
+        """add tile to a random position"""
+        assert isinstance(tile, Tile)
+        x_pos, y_pos = self.nextPos()
+        tile.setBoard(self, x_pos, y_pos)
+        tile.dark = False
+        tile.focusable = False
+        self.focusTile = tile
+        self.hasFocus = True
+        self.lastDiscarded = tile
 
     # pylint: disable=R0201
     # pylint we do not want this to be staticmethod
     def name(self):
         """to be used in debug output"""
         return "discardBoard"
-
-    def setRandomPlaces(self, randomGenerator):
-        """precompute random positions"""
-        self.__places = [(x, y) for x in range(self.width) for y in range(self.height)]
-        randomGenerator.shuffle(self.__places)
-
-    def discardTile(self, tile):
-        """add tile to a random position"""
-        assert isinstance(tile, Tile)
-        tile.setBoard(self, *self.__places.pop(0))
-        tile.dark = False
-        tile.focusable = False
-        self.focusTile = tile
-        self.hasFocus = True
-        self.lastDiscarded = tile
 
     def dropEvent(self, event):
         """drop a tile into the discard board"""
@@ -906,6 +903,59 @@ class DiscardBoard(CourtBoard):
         InternalParameters.field.clientDialog.selectButton(Message.Discard)
         event.accept()
         self._noPen()
+
+
+class SharedDiscardBoard(CourtBoard, DiscardBoard):
+    u""""
+    The one-for-all version of the discard board.
+    """
+    def __init__(self):
+        CourtBoard.__init__(self, 11, 9)
+        self.__places = None
+        self.setAcceptDrops(True)
+        self.lastDiscarded = None
+        self.isDiscardBoard = True
+
+    # pylint: disable=R0201
+    # pylint we do not want this to be staticmethod
+    def name(self):
+        """to be used in debug output"""
+        return "sharedDiscardBoard"
+
+    def setRandomPlaces(self, randomGenerator):
+        """precompute random positions"""
+        self.__places = [(x, y) for x in range(self.width) for y in range(self.height)]
+        randomGenerator.shuffle(self.__places)
+
+    def nextPos(self):
+        u"""
+        Return a random position to places the next tile.
+        """
+        return self.__places.pop(0)
+
+
+class OrderedDiscardBoard(DiscardBoard):
+    """
+    A board showing the tiles a player has discarded.
+    """
+    def __init__(self, player):
+        DiscardBoard.__init__(self, width=6, height=4)
+        self.player = player
+        self.setParentItem(player.front)
+        # self.setAcceptDrops(True)
+        self.showShadows = Preferences.showShadows
+        self.setPos(yHeight=-4, xWidth=5.5)
+
+    def name(self):
+        """to be used in debug output"""
+        return "orderedDiscardBoard"
+
+    def nextPos(self):
+        u"""
+        Return the next free position.
+        """
+        return len(self.tiles) % self.width, len(self.tiles) // self.width
+
 
 class MJScene(QGraphicsScene):
     """our scene with a potential Qt bug fix"""

@@ -133,6 +133,7 @@ class Player(object):
         self.remote = None # only for server
         self.voice = None
         self.handBoard = None
+        self.discardBoard = None
 
     def speak(self, text):
         """speak if we have a voice"""

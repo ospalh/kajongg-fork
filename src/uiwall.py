@@ -171,8 +171,12 @@ class UIWall(Wall):
         animateBuild = False
         with Animated(animateBuild):
             self.__shuffleTiles()
-            for tile in self.tiles:
-                tile.focusable = False
+            if self.tiles[0].board:
+                # Quick test. Only change the focusable if a random
+                # tile is in a board. May not be the case before the
+                # first Japanese-style hand.
+                for tile in self.tiles:
+                    tile.focusable = False
             return animate().addCallback(self.__placeWallTiles)
 
     def __placeWallTiles(self, dummyResult=None):
