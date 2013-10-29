@@ -939,7 +939,9 @@ class OrderedDiscardBoard(DiscardBoard):
     A board showing the tiles a player has discarded.
     """
     def __init__(self, player):
-        DiscardBoard.__init__(self, width=6, height=4)
+        self.nominalWidth = 6
+        # The drop target frame is too wide unless we subtrat 1 here.
+        DiscardBoard.__init__(self, width=self.nominalWidth-1, height=4)
         self.player = player
         self.setParentItem(player.front)
         # self.setAcceptDrops(True)
@@ -954,7 +956,8 @@ class OrderedDiscardBoard(DiscardBoard):
         u"""
         Return the next free position.
         """
-        return len(self.tiles) % self.width, len(self.tiles) // self.width
+        return len(self.tiles) % self.nominalWidth, \
+            len(self.tiles) // self.nominalWidth
 
 
 class MJScene(QGraphicsScene):

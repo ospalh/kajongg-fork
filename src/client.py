@@ -414,9 +414,12 @@ class Client(pb.Referenceable):
         calledTileName = calledTile.element
         self.game.discardedTiles[calledTileName.lower()] -= 1
         assert calledTileName in move.source, '%s %s'% (calledTileName, move.source)
-        # The discardBoard is either the shared, randomized or the
-        # indiviual, orderd one.
-        discarder.discardBoard.lastDiscarded = None
+        try:
+            # Depending on whether this is the game with the graphics
+            # stuff or not, there may or may not be a discardboard.
+            discarder.discardBoard.lastDiscarded = None
+        except AttributeError:
+            pass
         move.player.lastTile = calledTileName.lower()
         move.player.lastSource = 'd'
         hadTiles = move.source[:]
