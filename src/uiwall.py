@@ -20,9 +20,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 from common import BasicStyle, InternalParameters, Preferences, ZValues
 from PyQt4.QtCore import QRectF, QPointF
-from PyQt4.QtGui import QGraphicsSimpleTextItem
+from PyQt4.QtGui import QGraphicsSimpleTextItem, QGraphicsRectItem, QBrush, QColor, QFont, QFontMetrics
 
-from board import PlayerWind, YellowText, Board, rotateCenter
+from board import PlayerWind, YellowText, Board, rotateCenter, OrderedDiscardBoard
 from game import Wall
 from animation import animate, afterCurrentAnimationDo, Animated, \
     ParallelAnimationGroup
@@ -49,6 +49,10 @@ class UIWallSide(Board):
         Board.__init__(
             self, length, width, tileset, boardRotation=boardRotation)
         self.length = length
+        # We add a few of these later.
+        self.windTile = None
+        self.infoBox = None
+        self.nameLabel = None
 
     # pylint: disable=R0201
     def name(self):
@@ -68,6 +72,42 @@ class UIWallSide(Board):
         result.setX(result.x() + faceRect.height()/2) # corner tile
         return result
 
+class PlayerInfoBox(QGraphicsRectItem):
+    u"""
+    An area that contains some information about a player.
+
+    An area that contains some information about a player. This is
+    used for games with ordered discards, and fills up the area to the
+    right of the player’s discards.
+    """
+    def __init__(self, side, tileset):
+        QGraphicsRectItem.__init__(self, side)
+        self.side = side
+        self.font = QFont()
+        self.font.setPointSize(32)
+        self.f_height = tileset.faceSize.height()
+        self.f_width = tileset.faceSize.width()
+        # self.s_height = tileset.shadowHeight()
+        # self.s_width = tileset.shadowWidth()
+        self.height =  4 * self.f_height
+        self.width = 5.5 * self.f_width
+        self.setRect(0, 0, self.width, self.height)
+        metrics = QFontMetrics(self.font)
+        # self.width = metrics.width(self.msg)
+        self.line_height = metrics.lineSpacing()
+        # self.msg = None
+        # self.setText('')
+
+    def paint(self, painter, dummyOption, dummyWidget):
+        """override predefined paint"""
+        painter.setFont(self.font)
+        brush = QBrush(QColor(255, 255, 255, 128))
+        painter.fillRect(self.rect(), brush)
+        # painter.drawText(self.rect(), self.msg)
+
+
+
+
 class UIWall(Wall):
     """
     Representation of the wall with four sides.
@@ -81,24 +121,58 @@ class UIWall(Wall):
         game.wall = self
         self.game = game
         Wall.__init__(self, game)
-        self.__square = Board(1, 1, InternalParameters.field.tileset)
+        tileset = InternalParameters.field.tileset
+        inside = not InternalParameters.field.discardBoard
+        self.f_height = tileset.faceSize.height()
+        self.f_width = tileset.faceSize.width()
+        self.s_height = tileset.shadowHeight()
+        self.s_width = tileset.shadowWidth()
+        self.__square = Board(1, 1, tileset)
         self.__square.setZValue(ZValues.marker)
         sideLength = len(self.tiles) // 8
-        self.__sides = [UIWallSide(InternalParameters.field.tileset, boardRotation, sideLength) \
-            for boardRotation in (0, 270, 180, 90)]
-        for side in self.__sides:
+        angles = [0, 270, 180, 90]
+        self.__sides = [UIWallSide(tileset, boardRotation, sideLength) \
+            for boardRotation in angles]
+        for idx, side in enumerate(self.__sides):
+            if inside:
+                side.infoBox = PlayerInfoBox(side, tileset)
+                side.infoBox.setPos(
+                    side.center() + QPointF(
+                        3.0 * self.f_width,
+                        -4 * self.f_height - self.s_height))
+                        # 2.0 * self.f_width + self.s_width,
+                        # -3.5 * self.f_height - self.s_height))
+                box = side.infoBox
+            else:
+                box = None
             side.setParentItem(self.__square)
             side.lightSource = self.lightSource
-            side.windTile = PlayerWind('E', InternalParameters.field.windTileset, parent=side)
+            wind_name_parent = side.infoBox or side
+            side.windTile = PlayerWind(
+                'E', InternalParameters.field.windTileset,
+                parent=wind_name_parent)
+            if box:
+                side.windTile.setPos(box.rect().topRight() - QPointF(
+                        side.windTile.rect().width(), 0))
             side.windTile.hide()
-            side.nameLabel = QGraphicsSimpleTextItem('', side)
-            font = side.nameLabel.font()
-            font.setPointSize(48)
+            side.nameLabel = QGraphicsSimpleTextItem('', wind_name_parent)
+            if box:
+                font = box.font
+            else:
+                font = side.nameLabel.font()
+                font.setPointSize(48)
             side.nameLabel.setFont(font)
-            side.message = YellowText(side)
+            side.message = YellowText(wind_name_parent)
             side.message.setZValue(ZValues.popup)
             side.message.setVisible(False)
-            side.message.setPos(side.center())
+            if box:
+                side.message.font = font
+                side.nameLabel.setPos(box.rect().topLeft() + QPointF(
+                        10, 0.0 * box.line_height))
+                side.message.setPos(box.rect().topLeft() + QPointF(
+                        50,  3.0 * box.line_height))
+            else:
+                side.message.setPos(side.center())
         corner_offset = 1
         if game.ruleset.basicStyle == BasicStyle.Japanese:
             corner_offset = 0
@@ -370,8 +444,14 @@ class UIWall(Wall):
             self.decoratePlayer(player)
 
     def decoratePlayer(self, player):
-        """show player info on the wall"""
+        u"""
+        Show player info.
+
+        Show player info. It either appears on the wall or in the
+        empty space to the right of a player’s discards.
+        """
         side = player.front
+        box = side.infoBox  # Either a PlayerInfoBox or None
         sideCenter = side.center()
         name = side.nameLabel
         if player.handBoard:
@@ -380,14 +460,29 @@ class UIWall(Wall):
         else:
             name.setText(player.localName)
         name.resetTransform()
-        if side.rotation() == 180:
+        if side.rotation() == 180 and not box:
             rotateCenter(name, 180)
         nameRect = QRectF()
-        nameRect.setSize(name.mapToParent(name.boundingRect()).boundingRect().size())
-        name.setPos(sideCenter - nameRect.center())
+        nameRect.setSize(
+            name.mapToParent(name.boundingRect()).boundingRect().size())
+        if box:
+            box_rot = side.rotation()
+            if box_rot == 90 or box_rot == 270:
+                box.setRect(0, 0, box.height, box.width)
+            else:
+                box.setRect(0, 0, box.width, box.height)
+            rotateCenter(box, -box_rot)
+        else:
+            name.setPos(sideCenter - nameRect.center())
         player.colorizeName()
         side.windTile.setWind(player.wind, self.game.roundsFinished)
         side.windTile.resetTransform()
-        side.windTile.setPos(sideCenter.x()*1.63, sideCenter.y()-side.windTile.rect().height()/2.5)
+        if box:
+            side.windTile.setPos(box.rect().topRight() - QPointF(
+                    side.windTile.rect().width(), 0))
+        else:
+            side.windTile.setPos(
+                sideCenter.x()*1.63,
+                sideCenter.y()-side.windTile.rect().height()/2.5)
         side.nameLabel.show()
         side.windTile.show()
