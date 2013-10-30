@@ -333,7 +333,7 @@ class VisiblePlayer(Player):
     def __mjstring(self, singleRule, asWinner):
         """compile hand info into a string as needed by the scoring engine"""
         winds = self.wind.lower() + 'eswn'[self.game.roundsFinished % 4]
-        if asWinner or self == self.game.winner:
+        if asWinner or self in self.game.winners:
             wonChar = 'M'
         else:
             wonChar = 'm'
@@ -358,7 +358,7 @@ class VisiblePlayer(Player):
 
     def __lastString(self, asWinner):
         """compile hand info into a string as needed by the scoring engine"""
-        if not asWinner and self != self.game.winner:
+        if not asWinner and not self in self.game.winners:
             return ''
         lastTile = InternalParameters.field.computeLastTile()
         if not lastTile:
@@ -972,13 +972,16 @@ class PlayField(KXmlGuiWindow):
 
     def nextScoringHand(self):
         """save hand to database, update score table and balance in status line, prepare next hand"""
-        if self.game.winner:
+        if self.game.winners:
             for player in self.game.players:
                 player.usedDangerousFrom = None
                 for ruleBox in player.manualRuleBoxes:
                     rule = ruleBox.rule
                     if rule.name == 'Dangerous Game' and ruleBox.isChecked():
-                        self.game.winner.usedDangerousFrom = player
+                        # Assume dangerous game and multiple winners
+                        # are mutualy exclusive. (Kind-of true at the
+                        # moment.)
+                        self.game.winners[0].usedDangerousFrom = player
         self.game.saveHand()
         self.game.maybeRotateWinds()
         self.game.prepareHand()
