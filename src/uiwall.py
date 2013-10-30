@@ -20,7 +20,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 from common import BasicStyle, InternalParameters, Preferences, ZValues
 from PyQt4.QtCore import QRectF, QPointF
-from PyQt4.QtGui import QGraphicsSimpleTextItem, QGraphicsRectItem, QBrush, QColor, QFont, QFontMetrics
+from PyQt4.QtGui import QGraphicsSimpleTextItem, QGraphicsRectItem, QBrush, QPen, QColor, QFont, QFontMetrics
 
 from board import PlayerWind, YellowText, Board, rotateCenter, OrderedDiscardBoard
 from game import Wall
@@ -100,10 +100,12 @@ class PlayerInfoBox(QGraphicsRectItem):
 
     def paint(self, painter, dummyOption, dummyWidget):
         """override predefined paint"""
-        painter.setFont(self.font)
+        # painter.setFont(self.font)
         brush = QBrush(QColor(255, 255, 255, 128))
-        painter.fillRect(self.rect(), brush)
-        # painter.drawText(self.rect(), self.msg)
+        painter.setBrush(brush)
+        pen = QPen(QColor(128, 128, 128, 128))
+        painter.setPen(pen)
+        painter.drawRoundedRect(self.rect(), 5, 5)
 
 
 
@@ -122,7 +124,7 @@ class UIWall(Wall):
         self.game = game
         Wall.__init__(self, game)
         tileset = InternalParameters.field.tileset
-        inside = not InternalParameters.field.discardBoard
+        inside = InternalParameters.field.discardBoard is not None
         self.f_height = tileset.faceSize.height()
         self.f_width = tileset.faceSize.width()
         self.s_height = tileset.shadowHeight()
@@ -173,15 +175,15 @@ class UIWall(Wall):
                         50,  3.0 * box.line_height))
             else:
                 side.message.setPos(side.center())
-        corner_offset = 1
+        self.corner_offset = 1
         if game.ruleset.basicStyle == BasicStyle.Japanese:
-            corner_offset = 0
+            self.corner_offset = 0
         self.__sides[0].setPos(yWidth=sideLength)
-        self.__sides[3].setPos(xHeight=corner_offset)
-        self.__sides[2].setPos(
-            xHeight=corner_offset, xWidth=sideLength, yHeight=corner_offset)
+        self.__sides[3].setPos(xHeight=self.corner_offset)
+        self.__sides[2].setPos(xHeight=self.corner_offset, xWidth=sideLength,
+                               yHeight=self.corner_offset)
         self.__sides[1].setPos(
-            xWidth=sideLength, yWidth=sideLength, yHeight=corner_offset)
+            xWidth=sideLength, yWidth=sideLength, yHeight=self.corner_offset)
         self.showShadows = Preferences.showShadows
         InternalParameters.field.centralScene.addItem(self.__square)
 
