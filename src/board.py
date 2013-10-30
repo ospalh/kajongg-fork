@@ -551,7 +551,7 @@ class CourtBoard(Board):
         tileset = self.tileset
         avail = (cWall[2].sceneBoundingRect().width()
             - 2 * tileset.shadowHeight()
-            - tileset.faceSize.height())
+            - cWall.corner_offset * tileset.faceSize.height())
         xScaleFactor = avail / (self.width * tileset.faceSize.width() + tileset.shadowWidth())
         yScaleFactor = avail / (self.height * tileset.faceSize.height() + tileset.shadowHeight())
         Board.setScale(self, min(xScaleFactor, yScaleFactor))
@@ -939,9 +939,9 @@ class OrderedDiscardBoard(DiscardBoard):
     A board showing the tiles a player has discarded.
     """
     def __init__(self, player):
-        self.nominalWidth = 6
         # The drop target frame is too wide unless we subtrat 1 here.
-        DiscardBoard.__init__(self, width=self.nominalWidth-1, height=4)
+        DiscardBoard.__init__(self, width=6, height=4)
+        self.setRect(5, 4)  # Otherwise the blue frame is too big.
         self.player = player
         self.setParentItem(player.front)
         # self.setAcceptDrops(True)
