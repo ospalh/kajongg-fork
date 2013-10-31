@@ -368,7 +368,9 @@ class Board(QGraphicsRectItem):
         sizeX = self.tileset.faceSize.width() * self.__fixedWidth
         sizeY = self.tileset.faceSize.height() * self.__fixedHeight
         if self.showShadows:
-            sizeX += self.tileset.shadowWidth() + 2 * self.tileset.shadowHeight()
+            sizeX += self.tileset.shadowWidth()
+            if self.isHandBoard:
+                sizeX += 2 * self.tileset.shadowHeight()
             sizeY += self.tileset.shadowHeight()
         rect = self.rect()
         rect.setWidth(sizeX)
