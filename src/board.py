@@ -956,8 +956,8 @@ class OrderedDiscardBoard(DiscardBoard):
         u"""
         Return the next free position.
         """
-        return len(self.tiles) % self.nominalWidth, \
-            len(self.tiles) // self.nominalWidth
+        return len(self.tiles) % self.width, \
+            len(self.tiles) // self.width
 
 
 class MJScene(QGraphicsScene):
