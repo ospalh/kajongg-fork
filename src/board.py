@@ -941,7 +941,6 @@ class OrderedDiscardBoard(DiscardBoard):
     def __init__(self, player):
         # The drop target frame is too wide unless we subtrat 1 here.
         DiscardBoard.__init__(self, width=6, height=4)
-        self.setRect(5, 4)  # Otherwise the blue frame is too big.
         self.player = player
         self.setParentItem(player.front)
         # self.setAcceptDrops(True)
