@@ -124,7 +124,7 @@ class UIWall(Wall):
         self.game = game
         Wall.__init__(self, game)
         tileset = InternalParameters.field.tileset
-        inside = InternalParameters.field.discardBoard is not None
+        inside = game.ruleset.basicStyle == BasicStyle.Japanese
         self.f_height = tileset.faceSize.height()
         self.f_width = tileset.faceSize.width()
         self.s_height = tileset.shadowHeight()
