@@ -342,14 +342,17 @@ class UIWall(Wall):
         u"""
         Move the tiles in the kong box.
 
-        Move the tiles in the kong box (dead wall), either 0.5 tiles
-        outward or by 1 tiles in line.
+        Move the tiles in the kong box (dead wall), either half a tile
+        outward or by two tiles in line. One tile in line is kind-of
+        enough when you have shadows on, but not without. But two
+        tiles look better when there has been an odd number of
+        kongs. (And using 1.5 tiles causes all kinds of problems.)
         """
         x_off = 0
         y_off = 0.5
         if self.game.ruleset.basicStyle == BasicStyle.Japanese \
                 or self.game.ruleset.replenish_dead_wall:
-            x_off = -1
+            x_off = -2
             y_off = 0
         for tile in self.kongBox:
             self._moveDividedTile(tile, x_off, y_offset=y_off, level=None)
@@ -371,7 +374,6 @@ class UIWall(Wall):
         except IndexError:
             # No self.kongBox[2]. Shouldn’t happen in a typical game.
             lift_kongbox_tile = True
-
         if lift_kongbox_tile:
             try:
                 # Lift the old last kongbox tile
@@ -380,13 +382,13 @@ class UIWall(Wall):
                 # If it is there
                 pass
             # Now slide the moving tile underneath.
-            self._moveDividedTile(moved_tile, -1, level=0)
+            self._moveDividedTile(moved_tile, -2, level=0)
         else:
             # First slide the tile into the gap.
-            self._moveDividedTile(moved_tile, -1, level=0)
+            self._moveDividedTile(moved_tile, -2, level=0)
             try:
                 # Move the next-to-last tile of the living wall down to the
-                # table. (It *should* not already be be there.)
+                # table. (It *should* not already be there.)
                 self._moveDividedTile(self.living[-1], 0, level=0)
             except IndexError:
                 # Or it may not be there at all.
